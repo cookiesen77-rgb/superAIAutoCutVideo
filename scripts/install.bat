@@ -1,4 +1,11 @@
 @echo off
+
+:: Prevent flash close - catch all errors
+if "%~1"=="" (
+    cmd /k "%~f0" run
+    exit /b
+)
+
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 title superAIAutoCutVideo Setup
@@ -7,7 +14,7 @@ color 0A
 echo.
 echo  ============================================================
 echo       superAIAutoCutVideo Installation Script
-echo       Auto-install with winget / China mirror links
+echo       China Mirror - No VPN Required
 echo  ============================================================
 echo.
 
@@ -15,178 +22,141 @@ echo.
 set PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
 set NPM_MIRROR=https://registry.npmmirror.com
 
-:: ========== Check winget ==========
-set WINGET_OK=0
-where winget >nul 2>&1
-if not errorlevel 1 (
-    set WINGET_OK=1
-    echo   [OK] winget available
-)
+echo   Mirrors:
+echo     pip: Tsinghua University
+echo     npm: Taobao
+echo     model: ModelScope (Aliyun)
 echo.
 
 :: ========== Check Python ==========
-echo [Checking Python...]
+echo [Step 0] Checking environment...
+echo.
+
+echo   Checking Python...
 set PYTHON_OK=0
 where python >nul 2>&1
-if not errorlevel 1 (
-    :: Verify it's real Python, not Windows Store alias
-    python --version >nul 2>&1
-    if not errorlevel 1 (
-        for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
-        echo   [OK] !PYVER!
-        set PYTHON_OK=1
-    )
-)
+if errorlevel 1 goto :no_python
 
-if "!PYTHON_OK!"=="0" (
-    echo   [X] Python not found or not working
-    echo.
-    
-    :: Try winget install
-    if "!WINGET_OK!"=="1" (
-        echo   Trying winget install...
-        winget install Python.Python.3.11 --accept-package-agreements --accept-source-agreements >nul 2>&1
-        if not errorlevel 1 (
-            echo   [OK] Python installed via winget
-            echo.
-            echo   *** Please CLOSE this window and run install.bat AGAIN ***
-            echo.
-            pause
-            exit /b 0
-        )
-    )
-    
-    :: Manual install instructions
-    color 0C
-    echo   ============================================
-    echo   Please install Python manually:
-    echo.
-    echo   China Mirror (Fast):
-    echo   https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe
-    echo.
-    echo   Official:
-    echo   https://www.python.org/downloads/
-    echo.
-    echo   IMPORTANT: Check [x] Add Python to PATH
-    echo   ============================================
-    echo.
-    pause
-    exit /b 1
-)
+:: Verify it's real Python
+python -c "print('ok')" >nul 2>&1
+if errorlevel 1 goto :no_python
 
-:: ========== Check Node.js ==========
+for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
+echo   [OK] !PYVER!
+set PYTHON_OK=1
+goto :check_node
+
+:no_python
+echo   [X] Python not found
 echo.
-echo [Checking Node.js...]
+echo   ============================================
+echo   Please install Python first:
+echo.
+echo   China Mirror (Fast):
+echo   https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe
+echo.
+echo   [IMPORTANT] Check: Add Python to PATH
+echo   ============================================
+echo.
+echo   After installing Python, run this script again.
+echo.
+goto :end
+
+:check_node
+:: ========== Check Node.js ==========
+echo   Checking Node.js...
 set NODE_OK=0
 where node >nul 2>&1
-if not errorlevel 1 (
-    for /f "tokens=*" %%i in ('node --version 2^>^&1') do set NODEVER=%%i
-    echo   [OK] Node.js !NODEVER!
-    set NODE_OK=1
-)
+if errorlevel 1 goto :no_node
 
-if "!NODE_OK!"=="0" (
-    echo   [X] Node.js not found
-    echo.
-    
-    :: Try winget install
-    if "!WINGET_OK!"=="1" (
-        echo   Trying winget install...
-        winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements >nul 2>&1
-        if not errorlevel 1 (
-            echo   [OK] Node.js installed via winget
-            echo.
-            echo   *** Please CLOSE this window and run install.bat AGAIN ***
-            echo.
-            pause
-            exit /b 0
-        )
-    )
-    
-    :: Manual install instructions
-    color 0C
-    echo   ============================================
-    echo   Please install Node.js manually:
-    echo.
-    echo   China Mirror (Fast):
-    echo   https://mirrors.huaweicloud.com/nodejs/v20.18.0/node-v20.18.0-x64.msi
-    echo.
-    echo   Official:
-    echo   https://nodejs.org/
-    echo   ============================================
-    echo.
-    pause
-    exit /b 1
-)
+for /f "tokens=*" %%i in ('node --version 2^>^&1') do set NODEVER=%%i
+echo   [OK] Node.js !NODEVER!
+set NODE_OK=1
+goto :check_git
 
-:: ========== Check Git ==========
+:no_node
+echo   [X] Node.js not found
 echo.
-echo [Checking Git...]
+echo   ============================================
+echo   Please install Node.js first:
+echo.
+echo   China Mirror (Fast):
+echo   https://mirrors.huaweicloud.com/nodejs/v20.18.0/node-v20.18.0-x64.msi
+echo.
+echo   Official: https://nodejs.org/
+echo   ============================================
+echo.
+echo   After installing Node.js, run this script again.
+echo.
+goto :end
+
+:check_git
+:: ========== Check Git (optional) ==========
+echo   Checking Git...
 set GIT_OK=0
 where git >nul 2>&1
-if not errorlevel 1 (
-    echo   [OK] Git available
-    set GIT_OK=1
-) else (
-    echo   [!] Git not found (optional, for IndexTTS2)
+if errorlevel 1 (
+    echo   [!] Git not found (optional)
+    echo       IndexTTS2 requires Git, but you can skip it.
     echo.
-    echo   China Mirror (Fast):
+    echo   China Mirror:
     echo   https://mirrors.huaweicloud.com/git-for-windows/v2.47.0.windows.2/Git-2.47.0.2-64-bit.exe
     echo.
-    echo   Git is optional. Continue without it?
-    choice /C YN /M "Continue"
-    if errorlevel 2 (
-        pause
-        exit /b 1
-    )
+) else (
+    echo   [OK] Git available
+    set GIT_OK=1
 )
 
 echo.
-echo   Using China mirrors (No VPN needed)
-echo       pip: Tsinghua University
-echo       npm: Taobao Mirror
-echo       model: ModelScope
-
+echo   Environment check passed!
 echo.
 echo ============================================================
 echo.
 
-:: ========== Step 1: Create Virtual Environment ==========
+:: ========== Step 1: Create venv ==========
 echo [1/6] Creating Python virtual environment...
-cd /d "%~dp0..\backend"
+
+:: Navigate to backend directory
+cd /d "%~dp0"
+cd ..
+cd backend
+if errorlevel 1 (
+    echo   [X] Cannot find backend directory
+    goto :end
+)
+
 if exist "venv\Scripts\activate.bat" (
     echo       Already exists, skipping
 ) else (
-    echo       Creating venv...
+    echo       Creating...
     python -m venv venv
     if errorlevel 1 (
-        color 0C
-        echo       [X] Failed to create virtual environment
-        echo.
-        echo       This usually means Python is not installed correctly.
-        echo       Please reinstall Python with "Add to PATH" checked.
-        pause
-        exit /b 1
+        echo       [X] Failed to create venv
+        echo       Please reinstall Python with "Add to PATH" checked
+        goto :end
     )
     echo       [OK] Created
 )
 echo.
 
 :: ========== Step 2: Configure pip ==========
-echo [2/6] Configuring pip with Tsinghua mirror...
+echo [2/6] Configuring pip mirror...
 call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo       [X] Failed to activate venv
+    goto :end
+)
 python -m pip config set global.index-url %PIP_MIRROR% >nul 2>&1
-python -m pip install --upgrade pip -i %PIP_MIRROR% --quiet
+python -m pip install --upgrade pip -i %PIP_MIRROR% -q
 echo       [OK] Done
 echo.
 
-:: ========== Step 3: Install backend dependencies ==========
-echo [3/6] Installing Python dependencies...
-echo       Please wait (2-5 minutes)...
+:: ========== Step 3: Install backend ==========
+echo [3/6] Installing Python packages...
+echo       This takes 2-5 minutes, please wait...
 pip install -r requirements.txt -i %PIP_MIRROR%
 if errorlevel 1 (
-    color 0E
-    echo       [!] Some failed, but continuing...
+    echo       [!] Some packages failed
 ) else (
     echo       [OK] Done
 )
@@ -196,35 +166,42 @@ echo.
 echo [4/6] Installing IndexTTS2...
 
 if "!GIT_OK!"=="0" (
-    echo       [SKIP] Git not available
-    echo       You can install IndexTTS2 manually later
-    goto :skip_indextts
+    echo       [SKIP] Git not installed
+    goto :step5
 )
 
 echo       Trying Gitee mirror...
 pip install git+https://gitee.com/mirrors/index-tts.git -i %PIP_MIRROR% 2>nul
 if errorlevel 1 (
-    echo       Gitee failed, trying GitHub...
+    echo       Trying GitHub...
     pip install git+https://github.com/index-tts/index-tts.git -i %PIP_MIRROR% 2>nul
     if errorlevel 1 (
-        echo       [!] Failed - you can install manually later
+        echo       [!] Failed - install manually later
     ) else (
-        echo       [OK] Done (GitHub)
+        echo       [OK] Done
     )
 ) else (
-    echo       [OK] Done (Gitee)
+    echo       [OK] Done
 )
-:skip_indextts
+
+:step5
 echo.
 
 :: ========== Step 5: Install frontend ==========
-echo [5/6] Installing frontend dependencies...
-cd /d "%~dp0..\frontend"
+echo [5/6] Installing frontend packages...
+
+cd /d "%~dp0"
+cd ..
+cd frontend
+if errorlevel 1 (
+    echo       [X] Cannot find frontend directory
+    goto :end
+)
+
 call npm config set registry %NPM_MIRROR%
-echo       Please wait (1-3 minutes)...
+echo       This takes 1-3 minutes, please wait...
 call npm install
 if errorlevel 1 (
-    color 0E
     echo       [!] Failed
 ) else (
     echo       [OK] Done
@@ -233,33 +210,36 @@ echo.
 
 :: ========== Step 6: Download model ==========
 echo [6/6] Downloading IndexTTS2 model...
-cd /d "%~dp0..\backend"
+
+cd /d "%~dp0"
+cd ..
+cd backend
 call venv\Scripts\activate.bat
 
 if exist "checkpoints\config.yaml" (
     echo       Already exists, skipping
-    goto :install_done
+    goto :done
 )
 
-echo       Model: 3-5GB from ModelScope (China)
-echo       This may take 10-30 minutes...
+echo       Model size: 3-5GB
+echo       Downloading from ModelScope (China server)...
+echo       This takes 10-30 minutes...
 echo.
 
-pip install modelscope -i %PIP_MIRROR% --quiet
+pip install modelscope -i %PIP_MIRROR% -q
 python -c "from modelscope import snapshot_download; snapshot_download('IndexTeam/IndexTTS-1.5', local_dir='./checkpoints')"
 if errorlevel 1 (
-    color 0E
     echo.
     echo       [!] Download failed
     echo.
     echo       Manual download:
     echo       https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
-    echo       Download all files to: backend\checkpoints\
+    echo       Put files in: backend\checkpoints\
 ) else (
     echo       [OK] Done
 )
 
-:install_done
+:done
 echo.
 color 0A
 echo  ============================================================
@@ -268,9 +248,13 @@ echo  ============================================================
 echo.
 echo  To start: Double-click scripts\start.bat
 echo.
-echo  Voice files needed for IndexTTS2:
-echo    Put 6 WAV files in: backend\serviceData\index_tts\voices\
+echo  For IndexTTS2, put 6 voice WAV files in:
+echo    backend\serviceData\index_tts\voices\
 echo.
 echo ============================================================
-pause
+
+:end
+echo.
+echo Press any key to exit...
+pause >nul
 endlocal
