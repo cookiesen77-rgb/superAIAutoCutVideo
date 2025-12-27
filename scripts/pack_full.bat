@@ -1,49 +1,50 @@
 @echo off
-chcp 65001 >nul
-title 打包完整版（含虚拟环境和模型）
+chcp 65001 >nul 2>&1
+title Pack Full Version (with venv and model)
 color 0E
 
 echo.
-echo  ╔════════════════════════════════════════════════════════════╗
-echo  ║     打包完整版 - 含虚拟环境和模型                          ║
-echo  ║     运行后生成可直接使用的 ZIP 包                          ║
-echo  ╚════════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo       Pack Full Version - Including venv and model
+echo       Creates ready-to-use ZIP package
+echo  ============================================================
 echo.
 
 set PROJECT_DIR=%~dp0..
 set PACK_NAME=superAIAutoCutVideo_Full
 set PACK_DIR=%USERPROFILE%\Desktop\%PACK_NAME%
 
-:: ========== 步骤 1: 安装依赖 ==========
-echo [1/5] 检查并安装依赖...
+:: ========== Step 1: Check dependencies ==========
+echo [1/5] Checking dependencies...
 cd /d "%PROJECT_DIR%"
 
-:: 如果虚拟环境不存在，先运行安装
+:: If venv doesn't exist, run install first
 if not exist "backend\venv\Scripts\activate.bat" (
-    echo       虚拟环境不存在，先运行安装脚本...
+    echo       Virtual environment not found, running install...
     call scripts\install.bat
     if errorlevel 1 (
-        echo       [X] 安装失败
+        echo       [X] Installation failed
         pause
         exit /b 1
     )
 )
-echo       [√] 依赖已安装
+echo       [OK] Dependencies installed
 echo.
 
-:: ========== 步骤 2: 检查模型 ==========
-echo [2/5] 检查模型文件...
+:: ========== Step 2: Check model ==========
+echo [2/5] Checking model files...
 if not exist "backend\checkpoints\config.yaml" (
-    echo       [!] 模型文件不存在
-    echo       请先运行 install.bat 下载模型，或手动下载到 backend\checkpoints\
+    echo       [!] Model files not found
+    echo       Please run install.bat to download model first
+    echo       Or manually download to backend\checkpoints\
     pause
     exit /b 1
 )
-echo       [√] 模型文件已就绪
+echo       [OK] Model files ready
 echo.
 
-:: ========== 步骤 3: 检查音色文件 ==========
-echo [3/5] 检查音色文件...
+:: ========== Step 3: Check voice files ==========
+echo [3/5] Checking voice files...
 set VOICE_DIR=backend\serviceData\index_tts\voices
 set VOICE_COUNT=0
 if exist "%VOICE_DIR%\male_youth.wav" set /a VOICE_COUNT+=1
@@ -54,32 +55,32 @@ if exist "%VOICE_DIR%\female_lively.wav" set /a VOICE_COUNT+=1
 if exist "%VOICE_DIR%\child.wav" set /a VOICE_COUNT+=1
 
 if %VOICE_COUNT% LSS 6 (
-    echo       [!] 音色文件不完整 (%VOICE_COUNT%/6)
-    echo       请将 6 个音色 WAV 文件放入: %VOICE_DIR%\
+    echo       [!] Voice files incomplete (%VOICE_COUNT%/6)
+    echo       Put 6 voice WAV files in: %VOICE_DIR%\
     echo.
-    echo       缺少的文件会导致对应音色不可用，是否继续？
-    choice /C YN /M "继续打包"
+    echo       Missing files will cause voice unavailable. Continue?
+    choice /C YN /M "Continue packing"
     if errorlevel 2 exit /b 1
 ) else (
-    echo       [√] 音色文件完整 (6/6)
+    echo       [OK] Voice files complete (6/6)
 )
 echo.
 
-:: ========== 步骤 4: 创建打包目录 ==========
-echo [4/5] 创建打包目录...
+:: ========== Step 4: Create pack directory ==========
+echo [4/5] Creating pack directory...
 if exist "%PACK_DIR%" (
-    echo       清理旧打包目录...
+    echo       Cleaning old pack directory...
     rmdir /s /q "%PACK_DIR%"
 )
 mkdir "%PACK_DIR%"
 
-echo       复制项目文件...
-:: 复制后端（含虚拟环境和模型）
+echo       Copying project files...
+:: Copy backend (with venv and model)
 xcopy /E /I /Q "backend" "%PACK_DIR%\backend" >nul
-:: 排除 __pycache__
+:: Remove __pycache__
 for /d /r "%PACK_DIR%\backend" %%d in (__pycache__) do @if exist "%%d" rmdir /s /q "%%d"
 
-:: 复制前端（不含 node_modules）
+:: Copy frontend (without node_modules)
 mkdir "%PACK_DIR%\frontend"
 xcopy /E /I /Q "frontend\src" "%PACK_DIR%\frontend\src" >nul
 xcopy /E /I /Q "frontend\public" "%PACK_DIR%\frontend\public" >nul 2>nul
@@ -92,109 +93,121 @@ copy "frontend\index.html" "%PACK_DIR%\frontend\" >nul 2>nul
 copy "frontend\tailwind.config.js" "%PACK_DIR%\frontend\" >nul 2>nul
 copy "frontend\postcss.config.js" "%PACK_DIR%\frontend\" >nul 2>nul
 
-:: 复制脚本和文档
+:: Copy scripts and docs
 xcopy /E /I /Q "scripts" "%PACK_DIR%\scripts" >nul
 xcopy /E /I /Q "docs" "%PACK_DIR%\docs" >nul 2>nul
 copy "LICENSE" "%PACK_DIR%\" >nul 2>nul
 copy "README.md" "%PACK_DIR%\" >nul 2>nul
-copy "快速开始.md" "%PACK_DIR%\" >nul 2>nul
 
-echo       [√] 文件复制完成
+echo       [OK] Files copied
 echo.
 
-:: ========== 步骤 5: 创建启动脚本 ==========
-echo [5/5] 创建快速启动脚本...
+:: ========== Step 5: Create startup scripts ==========
+echo [5/5] Creating startup scripts...
 
-:: 创建简化版启动脚本（无需安装，直接运行）
+:: Create simplified startup script (run directly without install)
 (
 echo @echo off
-echo chcp 65001 ^>nul
+echo chcp 65001 ^>nul 2^>^&1
 echo title superAIAutoCutVideo
 echo color 0A
 echo.
-echo echo  启动 superAIAutoCutVideo...
+echo echo  Starting superAIAutoCutVideo...
 echo echo.
 echo.
-echo :: 启动后端
+echo :: Start backend
 echo cd /d "%%~dp0backend"
 echo start "Backend" cmd /k "call venv\Scripts\activate.bat && python main.py"
 echo.
-echo :: 等待后端启动
+echo :: Wait for backend
 echo timeout /t 5 /nobreak ^>nul
 echo.
-echo :: 启动前端
+echo :: Start frontend
 echo cd /d "%%~dp0frontend"
 echo start "Frontend" cmd /k "npm run dev"
 echo.
 echo echo.
 echo echo  ============================================
-echo echo    服务已启动！
-echo echo    后端: http://localhost:8000
-echo echo    前端: http://localhost:5173
+echo echo    Services Started!
+echo echo    Backend:  http://localhost:8000
+echo echo    Frontend: http://localhost:5173
 echo echo  ============================================
 echo echo.
-echo echo  关闭方式: 关闭两个命令行窗口
+echo echo  To stop: Close both command windows
 echo pause
-) > "%PACK_DIR%\启动.bat"
+) > "%PACK_DIR%\START.bat"
 
-:: 创建前端依赖安装脚本（首次使用需要运行一次）
+:: Create frontend dependency install script (run once for first use)
 (
 echo @echo off
-echo chcp 65001 ^>nul
-echo title 安装前端依赖
-echo echo 正在安装前端依赖...
+echo chcp 65001 ^>nul 2^>^&1
+echo title Install Frontend Dependencies
+echo echo Installing frontend dependencies...
+echo echo This only needs to run once.
+echo echo.
 echo cd /d "%%~dp0frontend"
 echo call npm config set registry https://registry.npmmirror.com
 echo call npm install
 echo echo.
-echo echo [√] 前端依赖安装完成！
-echo echo 现在可以双击"启动.bat"运行程序了
+echo echo [OK] Frontend dependencies installed!
+echo echo Now you can double-click START.bat to run the app.
 echo pause
-) > "%PACK_DIR%\首次使用-安装前端依赖.bat"
+) > "%PACK_DIR%\FIRST_TIME_SETUP.bat"
 
-echo       [√] 启动脚本创建完成
+:: Create README
+(
+echo ============================================
+echo   superAIAutoCutVideo - Quick Start Guide
+echo ============================================
+echo.
+echo FOR FIRST TIME USE:
+echo   1. Double-click FIRST_TIME_SETUP.bat
+echo      ^(This installs frontend dependencies, ~1 min^)
+echo.
+echo TO START THE APP:
+echo   2. Double-click START.bat
+echo.
+echo ============================================
+) > "%PACK_DIR%\README.txt"
+
+echo       [OK] Startup scripts created
 echo.
 
-:: ========== 计算大小并显示结果 ==========
+:: ========== Show results ==========
 echo ============================================================
 echo.
-echo  打包完成！
+echo  Packing Complete!
 echo.
-echo  输出目录: %PACK_DIR%
+echo  Output: %PACK_DIR%
 echo.
-
-:: 获取目录大小
-for /f "tokens=3" %%a in ('dir /s "%PACK_DIR%" ^| findstr "个文件"') do set SIZE=%%a
-echo  预计大小: 约 %SIZE% 字节
-echo.
-echo  目录结构:
+echo  Structure:
 echo    %PACK_NAME%\
-echo    ├── backend\          (含 venv 和 checkpoints)
-echo    ├── frontend\         (不含 node_modules)
-echo    ├── scripts\
-echo    ├── docs\
-echo    ├── 启动.bat          ← 双击启动
-echo    └── 首次使用-安装前端依赖.bat
+echo    +-- backend\          (with venv and checkpoints)
+echo    +-- frontend\         (without node_modules)
+echo    +-- scripts\
+echo    +-- docs\
+echo    +-- START.bat         ^<-- Double-click to start
+echo    +-- FIRST_TIME_SETUP.bat
+echo    +-- README.txt
 echo.
 echo ============================================================
 echo.
-echo  客户使用方式:
-echo    1. 首次使用: 双击"首次使用-安装前端依赖.bat"
-echo    2. 之后启动: 双击"启动.bat"
+echo  Customer usage:
+echo    1. First time: Double-click FIRST_TIME_SETUP.bat
+echo    2. Start app:  Double-click START.bat
 echo.
-echo  是否压缩为 ZIP？
-choice /C YN /M "压缩"
+echo  Compress to ZIP?
+choice /C YN /M "Create ZIP"
 if errorlevel 2 goto :done
 
 echo.
-echo  正在压缩...
+echo  Compressing...
 cd /d "%USERPROFILE%\Desktop"
 powershell -Command "Compress-Archive -Path '%PACK_NAME%' -DestinationPath '%PACK_NAME%.zip' -Force"
 echo.
-echo  [√] ZIP 已创建: %USERPROFILE%\Desktop\%PACK_NAME%.zip
+echo  [OK] ZIP created: %USERPROFILE%\Desktop\%PACK_NAME%.zip
 echo.
 
 :done
 echo ============================================================
 pause
-

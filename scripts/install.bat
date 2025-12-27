@@ -1,198 +1,199 @@
 @echo off
-chcp 65001 >nul
-title superAIAutoCutVideo 安装程序
+chcp 65001 >nul 2>&1
+title superAIAutoCutVideo Setup
 color 0A
 
 echo.
-echo  ╔════════════════════════════════════════════════════════════╗
-echo  ║      superAIAutoCutVideo 一键安装脚本 (Windows)            ║
-echo  ║      支持虚拟环境 - 使用国内镜像源                         ║
-echo  ╚════════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo       superAIAutoCutVideo Installation Script (Windows)
+echo       Using China Mirror Sources - No VPN Required
+echo  ============================================================
 echo.
 
-:: 国内镜像配置
+:: China mirror configuration
 set PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
 set NPM_MIRROR=https://registry.npmmirror.com
 
-:: ========== 环境检查 ==========
-echo [环境检查]
+:: ========== Environment Check ==========
+echo [Environment Check]
 echo.
 
-:: 检查 Python
-echo   检查 Python...
-python --version >nul 2>&1
+:: Check Python
+echo   Checking Python...
+where python >nul 2>&1
 if errorlevel 1 (
     color 0C
-    echo   [X] 未检测到 Python
+    echo   [X] Python not found
     echo.
-    echo   请先安装 Python 3.10+
-    echo   下载地址: https://www.python.org/downloads/
-    echo   安装时请勾选 "Add Python to PATH"
+    echo   Please install Python 3.10+ first:
+    echo   Download: https://www.python.org/downloads/
+    echo.
+    echo   IMPORTANT: Check "Add Python to PATH" during installation!
     echo.
     pause
     exit /b 1
 )
 for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
-echo   [√] Python %PYVER%
+echo   [OK] Python %PYVER%
 
-:: 检查 Node.js
-echo   检查 Node.js...
-node --version >nul 2>&1
+:: Check Node.js
+echo   Checking Node.js...
+where node >nul 2>&1
 if errorlevel 1 (
     color 0C
-    echo   [X] 未检测到 Node.js
+    echo   [X] Node.js not found
     echo.
-    echo   请先安装 Node.js 18+
-    echo   下载地址: https://nodejs.org/
+    echo   Please install Node.js 18+ first:
+    echo   Download: https://nodejs.org/
     echo.
     pause
     exit /b 1
 )
 for /f %%i in ('node --version 2^>^&1') do set NODEVER=%%i
-echo   [√] Node.js %NODEVER%
+echo   [OK] Node.js %NODEVER%
 
-echo   [√] 使用国内镜像源（无需 VPN）
-echo       pip: %PIP_MIRROR%
-echo       npm: %NPM_MIRROR%
+echo   [OK] Using China mirrors (No VPN needed)
+echo       pip: Tsinghua University
+echo       npm: Taobao Mirror
 
 echo.
 echo ============================================================
 echo.
 
-:: ========== 步骤 1: 创建虚拟环境 ==========
-echo [1/6] 创建 Python 虚拟环境...
+:: ========== Step 1: Create Virtual Environment ==========
+echo [1/6] Creating Python virtual environment...
 cd /d "%~dp0..\backend"
 if exist "venv\Scripts\activate.bat" (
-    echo       虚拟环境已存在，跳过
+    echo       Virtual environment exists, skipping
 ) else (
-    echo       正在创建虚拟环境...
+    echo       Creating venv...
     python -m venv venv
     if errorlevel 1 (
         color 0C
-        echo       [X] 虚拟环境创建失败
+        echo       [X] Failed to create virtual environment
         pause
         exit /b 1
     )
-    echo       [√] 虚拟环境创建成功
+    echo       [OK] Virtual environment created
 )
 echo.
 
-:: ========== 步骤 2: 配置 pip 国内镜像并升级 ==========
-echo [2/6] 配置 pip 国内镜像并升级...
+:: ========== Step 2: Configure pip mirror and upgrade ==========
+echo [2/6] Configuring pip China mirror...
 call venv\Scripts\activate.bat
 python -m pip config set global.index-url %PIP_MIRROR% >nul 2>&1
 python -m pip install --upgrade pip -i %PIP_MIRROR% --quiet
-echo       [√] pip 已配置清华镜像
+echo       [OK] pip configured with Tsinghua mirror
 echo.
 
-:: ========== 步骤 3: 安装后端依赖 ==========
-echo [3/6] 安装后端 Python 依赖...
-echo       这可能需要几分钟，请耐心等待...
+:: ========== Step 3: Install backend dependencies ==========
+echo [3/6] Installing Python dependencies...
+echo       This may take a few minutes, please wait...
 pip install -r requirements.txt -i %PIP_MIRROR%
 if errorlevel 1 (
     color 0E
-    echo       [!] 部分依赖安装失败，请检查网络
+    echo       [!] Some dependencies failed, check network
 ) else (
-    echo       [√] 后端依赖安装完成
+    echo       [OK] Backend dependencies installed
 )
 echo.
 
-:: ========== 步骤 4: 安装 IndexTTS2 ==========
-echo [4/6] 安装 IndexTTS2...
-echo       正在从 Gitee 镜像安装（国内加速）...
+:: ========== Step 4: Install IndexTTS2 ==========
+echo [4/6] Installing IndexTTS2...
+echo       Trying Gitee mirror (China)...
 
-:: 尝试从 Gitee 镜像安装
+:: Try Gitee mirror first
 pip install git+https://gitee.com/mirrors/index-tts.git -i %PIP_MIRROR% 2>nul
 if errorlevel 1 (
-    echo       Gitee 镜像失败，尝试 GitHub...
+    echo       Gitee failed, trying GitHub...
     pip install git+https://github.com/index-tts/index-tts.git -i %PIP_MIRROR% 2>nul
     if errorlevel 1 (
         color 0E
-        echo       [!] IndexTTS2 安装失败
+        echo       [!] IndexTTS2 installation failed
         echo.
-        echo       请手动安装，方法：
-        echo       1. 下载: https://github.com/index-tts/index-tts/archive/refs/heads/main.zip
-        echo       2. 解压后进入目录，运行: pip install .
+        echo       Manual install method:
+        echo       1. Download: https://github.com/index-tts/index-tts/archive/refs/heads/main.zip
+        echo       2. Extract and run: pip install .
         echo.
     ) else (
-        echo       [√] IndexTTS2 安装完成（GitHub）
+        echo       [OK] IndexTTS2 installed (GitHub)
     )
 ) else (
-    echo       [√] IndexTTS2 安装完成（Gitee 镜像）
+    echo       [OK] IndexTTS2 installed (Gitee mirror)
 )
 echo.
 
-:: ========== 步骤 5: 安装前端依赖 ==========
-echo [5/6] 安装前端 npm 依赖...
+:: ========== Step 5: Install frontend dependencies ==========
+echo [5/6] Installing npm dependencies...
 cd /d "%~dp0..\frontend"
-echo       配置 npm 淘宝镜像...
+echo       Configuring npm Taobao mirror...
 call npm config set registry %NPM_MIRROR%
-echo       这可能需要几分钟，请耐心等待...
+echo       This may take a few minutes, please wait...
 call npm install
 if errorlevel 1 (
     color 0E
-    echo       [!] 前端依赖安装失败
+    echo       [!] Frontend dependencies failed
 ) else (
-    echo       [√] 前端依赖安装完成
+    echo       [OK] Frontend dependencies installed
 )
 echo.
 
-:: ========== 步骤 6: 下载模型 ==========
-echo [6/6] 下载 IndexTTS2 模型...
+:: ========== Step 6: Download model ==========
+echo [6/6] Downloading IndexTTS2 model...
 cd /d "%~dp0..\backend"
 call venv\Scripts\activate.bat
 
-:: 检查模型是否已存在
+:: Check if model exists
 if exist "checkpoints\config.yaml" (
-    echo       模型已存在，跳过下载
+    echo       Model already exists, skipping
     goto :install_done
 )
 
-echo       模型大小约 3-5GB，请确保网络畅通...
-echo       正在从 ModelScope 下载（国内服务器，无需 VPN）...
+echo       Model size: 3-5GB, please ensure network is stable...
+echo       Downloading from ModelScope (China server, no VPN)...
 echo.
 
-:: 先安装 modelscope
+:: Install modelscope first
 pip install modelscope -i %PIP_MIRROR% --quiet
 
 python -c "from modelscope import snapshot_download; snapshot_download('IndexTeam/IndexTTS-1.5', local_dir='./checkpoints')"
 if errorlevel 1 (
     color 0E
     echo.
-    echo       [!] 模型下载失败
+    echo       [!] Model download failed
     echo.
-    echo       请手动下载，方法：
-    echo       1. 访问: https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
-    echo       2. 点击"下载模型"，下载所有文件
-    echo       3. 解压到 backend\checkpoints\ 目录
+    echo       Manual download method:
+    echo       1. Visit: https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
+    echo       2. Click "Download Model"
+    echo       3. Extract to backend\checkpoints\ folder
     echo.
 ) else (
-    echo       [√] 模型下载完成
+    echo       [OK] Model downloaded
 )
 
 :install_done
 echo.
 color 0A
-echo  ╔════════════════════════════════════════════════════════════╗
-echo  ║                    安装完成！                              ║
-echo  ╚════════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo                    Installation Complete!
+echo  ============================================================
 echo.
-echo  启动方式:
-echo    双击 scripts\start.bat
+echo  How to start:
+echo    Double-click scripts\start.bat
 echo.
-echo  或手动启动:
-echo    后端: cd backend ^&^& venv\Scripts\activate ^&^& python main.py
-echo    前端: cd frontend ^&^& npm run dev
+echo  Or manually:
+echo    Backend: cd backend ^&^& venv\Scripts\activate ^&^& python main.py
+echo    Frontend: cd frontend ^&^& npm run dev
 echo.
-echo  注意事项:
-echo    1. 首次使用需准备 6 个音色 WAV 文件
-echo       放入: backend\serviceData\index_tts\voices\
-echo    2. 详细说明请查看: docs\IndexTTS2_使用指南.md
+echo  Note:
+echo    1. Prepare 6 voice WAV files for first use
+echo       Location: backend\serviceData\index_tts\voices\
+echo    2. See docs\IndexTTS2_Guide.md for details
 echo.
-echo  使用的国内镜像:
-echo    pip:  清华大学 (%PIP_MIRROR%)
-echo    npm:  淘宝镜像 (%NPM_MIRROR%)
-echo    模型: ModelScope（阿里云）
+echo  Mirrors used:
+echo    pip:   Tsinghua University (%PIP_MIRROR%)
+echo    npm:   Taobao Mirror (%NPM_MIRROR%)
+echo    Model: ModelScope (Aliyun China)
 echo.
 echo ============================================================
 pause

@@ -1,38 +1,44 @@
 @echo off
-chcp 65001 >nul
-echo ============================================================
-echo     superAIAutoCutVideo 启动脚本
-echo ============================================================
+chcp 65001 >nul 2>&1
+title superAIAutoCutVideo
+color 0A
+
+echo  ============================================================
+echo       superAIAutoCutVideo - Starting Services
+echo  ============================================================
 echo.
 
-:: 启动后端
-echo [启动后端服务...]
+:: Start backend
+echo [Starting Backend Server...]
 cd /d "%~dp0..\backend"
 if not exist "venv\Scripts\activate.bat" (
-    echo [错误] 虚拟环境不存在，请先运行 install.bat
+    color 0C
+    echo [ERROR] Virtual environment not found
+    echo Please run install.bat first
     pause
     exit /b 1
 )
 
 start "Backend Server" cmd /k "call venv\Scripts\activate.bat && python main.py"
 
-:: 等待后端启动
-echo 等待后端启动 (5秒)...
+:: Wait for backend
+echo Waiting for backend to start (5 seconds)...
 timeout /t 5 /nobreak >nul
 
-:: 启动前端
-echo [启动前端服务...]
+:: Start frontend
+echo [Starting Frontend Server...]
 cd /d "%~dp0..\frontend"
 start "Frontend Server" cmd /k "npm run dev"
 
 echo.
-echo ============================================================
-echo     服务已启动！
-echo ============================================================
+echo  ============================================================
+echo       Services Started!
+echo  ============================================================
 echo.
-echo 后端地址: http://localhost:8000
-echo 前端地址: http://localhost:5173 (或查看终端输出)
+echo  Backend:  http://localhost:8000
+echo  Frontend: http://localhost:5173 (check terminal for actual port)
 echo.
-echo 关闭方式: 关闭两个命令行窗口即可
-echo ============================================================
-
+echo  To stop: Close both command windows
+echo  ============================================================
+echo.
+pause
