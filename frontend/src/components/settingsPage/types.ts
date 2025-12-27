@@ -86,7 +86,35 @@ export interface TtsEngineConfig {
   enabled: boolean;
   active_voice_id?: string | null;
   speed_ratio: number;
-  extra_params?: Record<string, any>;
+  extra_params?: {
+    // IndexTTS2 情感控制参数
+    emotion_mode?: 'auto' | 'manual' | 'disabled';
+    default_emotion?: string;
+    emo_alpha?: number;
+    use_fp16?: boolean;
+    // 其他参数
+    [key: string]: any;
+  };
+}
+
+/**
+ * TTS 情感类型（IndexTTS2 专用）
+ */
+export interface TtsEmotion {
+  id: string;
+  name: string;
+  icon: string;
+  description?: string;
+}
+
+/**
+ * IndexTTS 模型状态
+ */
+export interface IndexTtsStatus {
+  loaded: boolean;
+  loading: boolean;
+  available: boolean;
+  error?: string | null;
 }
 
 export interface TtsConfigsData {

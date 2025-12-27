@@ -321,3 +321,77 @@ async def preview_voice(voice_id: str, req: VoicePreviewRequest):
     except Exception as e:
         logger.error(f"音色试听失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== IndexTTS2 专属 API ==========
+
+@router.get("/emotions", summary="获取可用情感列表")
+async def get_emotions():
+    """获取 IndexTTS2 支持的情感类型列表"""
+    emotions = [
+        {"id": "disabled", "name": "禁用情感", "icon": "🔇", "description": "不使用情感控制"},
+        {"id": "auto", "name": "自动推断", "icon": "🎯", "description": "根据文本内容自动推断情感"},
+        {"id": "happy", "name": "开心", "icon": "😊", "description": "欢快愉悦的语调"},
+        {"id": "sad", "name": "悲伤", "icon": "😢", "description": "低沉哀伤的语调"},
+        {"id": "angry", "name": "愤怒", "icon": "😠", "description": "激动愤怒的语调"},
+        {"id": "afraid", "name": "恐惧", "icon": "😨", "description": "紧张害怕的语调"},
+        {"id": "calm", "name": "平静", "icon": "😌", "description": "平和舒缓的语调"},
+        {"id": "surprised", "name": "惊讶", "icon": "😲", "description": "惊讶意外的语调"},
+        {"id": "melancholic", "name": "忧郁", "icon": "😔", "description": "忧愁沉思的语调"},
+        {"id": "disgusted", "name": "厌恶", "icon": "🤢", "description": "厌烦反感的语调"},
+    ]
+    return {"success": True, "data": emotions, "message": f"获取到 {len(emotions)} 种情感类型"}
+
+
+@router.get("/index-tts/status", summary="获取 IndexTTS 模型状态")
+async def get_index_tts_status():
+    """获取 IndexTTS2 模型加载状态和可用性"""
+    try:
+        from modules.index_tts_service import index_tts_service
+        return {
+            "success": True,
+            "data": {
+                "loaded": index_tts_service.is_model_loaded(),
+                "loading": index_tts_service._model_loading,
+                "available": index_tts_service.is_model_available(),
+                "error": index_tts_service.get_load_error(),
+            },
+            "message": "模型状态获取成功"
+        }
+    except ImportError as e:
+        return {
+            "success": False,
+            "data": {"loaded": False, "loading": False, "available": False},
+            "error": f"IndexTTS2 模块未安装: {e}"
+        }
+    except Exception as e:
+        logger.error(f"获取 IndexTTS 状态失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/index-tts/preload", summary="预加载 IndexTTS 模型")
+async def preload_index_tts_model():
+    """预加载 IndexTTS2 模型到显存（首次加载约需 30-60 秒）"""
+    try:
+        from modules.index_tts_service import index_tts_service
+        result = await index_tts_service.preload_model()
+        return {"success": result.get("success", False), "data": result}
+    except ImportError as e:
+        return {"success": False, "error": f"IndexTTS2 模块未安装: {e}"}
+    except Exception as e:
+        logger.error(f"预加载 IndexTTS 模型失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/index-tts/test", summary="测试 IndexTTS 可用性")
+async def test_index_tts():
+    """测试 IndexTTS2 模型文件和音色可用性"""
+    try:
+        from modules.index_tts_service import index_tts_service
+        result = await index_tts_service.test_connection()
+        return {"success": result.get("success", False), "data": result}
+    except ImportError as e:
+        return {"success": False, "error": f"IndexTTS2 模块未安装: {e}"}
+    except Exception as e:
+        logger.error(f"测试 IndexTTS 失败: {e}")
+        return {"success": False, "error": str(e)}

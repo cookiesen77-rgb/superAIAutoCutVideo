@@ -56,6 +56,56 @@ class TencentTtsService:
         cfg = tts_engine_config_manager.get_active_config()
         provider = (getattr(cfg, "provider", None) or "tencent_tts").lower()
 
+        # IndexTTS2 本地推理路径
+        if provider == "index_tts":
+            try:
+                from modules.index_tts_service import index_tts_service
+            except Exception as e:
+                return {"success": False, "error": f"index_tts_import_failed: {e}"}
+
+            vid = voice_id or (cfg.active_voice_id if cfg else None) or "female_sweet"
+            extra = (cfg.extra_params if cfg else {}) or {}
+            emotion_mode = extra.get("emotion_mode", "auto")
+            emotion = extra.get("default_emotion", "calm") if emotion_mode == "manual" else None
+            emo_alpha = float(extra.get("emo_alpha", 0.6))
+            use_emo_text = (emotion_mode == "auto")
+
+            # IndexTTS2 输出格式为 wav，若目标为 mp3 则需要后续转换
+            out = Path(out_path)
+            wav_out = out.with_suffix(".wav") if out.suffix.lower() != ".wav" else out
+
+            try:
+                res = await index_tts_service.synthesize(
+                    text=text,
+                    out_path=str(wav_out),
+                    voice_id=vid,
+                    emotion=emotion,
+                    emo_alpha=emo_alpha,
+                    use_emo_text=use_emo_text,
+                )
+                if not res.get("success"):
+                    return res
+
+                # 如果目标是 mp3，转换格式
+                if out.suffix.lower() == ".mp3" and wav_out != out:
+                    try:
+                        cmd = ["ffmpeg", "-y", "-i", str(wav_out), "-codec:a", "libmp3lame", "-q:a", "2", str(out)]
+                        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                        await proc.communicate()
+                        if proc.returncode == 0:
+                            wav_out.unlink(missing_ok=True)
+                            res["path"] = str(out)
+                            res["codec"] = "mp3"
+                            dur = await _ffprobe_duration(str(out))
+                            if dur:
+                                res["duration"] = dur
+                    except Exception:
+                        pass  # 转换失败则保留 wav
+
+                return res
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
         # Edge TTS 合成路径（免凭据）
         if provider == "edge_tts":
             try:

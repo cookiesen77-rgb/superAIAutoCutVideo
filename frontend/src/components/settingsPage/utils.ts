@@ -105,7 +105,38 @@ export const getContentDefaultDescription = (provider: string): string => {
 // 根据提供商获取TTS配置ID（后端默认示例为 tencent_tts_default）
 export const getTtsConfigIdByProvider = (provider: string): string => {
   if (provider === "tencent_tts") return "tencent_tts_default";
+  if (provider === "index_tts") return "index_tts_default";
   return `${provider}_default`;
+};
+
+// IndexTTS2 情感模式标签
+export const getEmotionModeLabel = (mode: string): string => {
+  const labels: Record<string, string> = {
+    auto: "自动推断",
+    manual: "手动选择",
+    disabled: "禁用",
+  };
+  return labels[mode] || mode;
+};
+
+// IndexTTS2 情感类型标签
+export const getEmotionLabel = (emotion: string): string => {
+  const labels: Record<string, string> = {
+    happy: "开心",
+    sad: "悲伤",
+    angry: "愤怒",
+    afraid: "恐惧",
+    calm: "平静",
+    surprised: "惊讶",
+    melancholic: "忧郁",
+    disgusted: "厌恶",
+  };
+  return labels[emotion] || emotion;
+};
+
+// 检查是否为本地推理引擎（无需凭据）
+export const isLocalEngine = (provider: string): boolean => {
+  return provider === "index_tts";
 };
 
 // 语速标签映射

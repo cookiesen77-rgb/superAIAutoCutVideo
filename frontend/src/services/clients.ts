@@ -278,6 +278,27 @@ export class ApiClient {
   async previewTtsVoice(voiceId: string, req?: { text?: string; provider?: string; config_id?: string }): Promise<any> {
     return this.post(`/api/tts/voices/${encodeURIComponent(voiceId)}/preview`, req || {});
   }
+
+  // ===== IndexTTS2 专属 API =====
+  // 获取情感类型列表
+  async getTtsEmotions(): Promise<any> {
+    return this.get('/api/tts/emotions');
+  }
+
+  // 获取 IndexTTS 模型状态
+  async getIndexTtsStatus(): Promise<any> {
+    return this.get('/api/tts/index-tts/status');
+  }
+
+  // 预加载 IndexTTS 模型
+  async preloadIndexTts(): Promise<any> {
+    return this.post('/api/tts/index-tts/preload');
+  }
+
+  // 测试 IndexTTS 可用性
+  async testIndexTts(): Promise<any> {
+    return this.post('/api/tts/index-tts/test');
+  }
 }
 
 // WebSocket客户端类

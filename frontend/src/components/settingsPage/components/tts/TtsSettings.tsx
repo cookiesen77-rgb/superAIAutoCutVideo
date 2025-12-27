@@ -1,12 +1,13 @@
 import { TauriCommands } from "@/services/tauriService";
 import { ttsService } from "@/services/ttsService";
-import { AlertCircle, CheckCircle, Loader } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader, Cpu, Sparkles } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { TtsCredentialForm } from "../../components/tts/TtsCredentialForm";
 import { TtsEngineSelect } from "../../components/tts/TtsEngineSelect";
 import { TtsSpeedSlider } from "../../components/tts/TtsSpeedSlider";
 import { TtsVoiceGallery } from "../../components/tts/TtsVoiceGallery";
-import type { TtsEngineConfig, TtsEngineMeta, TtsTestResult, TtsVoice } from "../../types";
+import { TtsEmotionSelect } from "../../components/tts/TtsEmotionSelect";
+import type { TtsEngineConfig, TtsEngineMeta, TtsTestResult, TtsVoice, IndexTtsStatus } from "../../types";
 import { getSpeedLabel, getTtsConfigIdByProvider } from "../../utils";
  
 import { LabeledChip } from "./LabeledGroup";
@@ -37,10 +38,14 @@ export const TtsSettings: React.FC = () => {
   const [testResult, setTestResult] = useState<TtsTestResult | null>(null);
   const [testDurationMs, setTestDurationMs] = useState<number | null>(null);
 
+  // IndexTTS 模型状态
+  const [indexTtsStatus, setIndexTtsStatus] = useState<IndexTtsStatus | null>(null);
+  const [preloading, setPreloading] = useState<boolean>(false);
+
   const hasCredentials = useMemo(() => {
-    // Edge TTS 免凭据：只要当前提供商为 edge_tts，则视为具备“连通性测试许可”
-    if (provider === "edge_tts") return true;
-    // 腾讯云：后端返回时会将已设置的敏感值脱敏为“***”，以此判断是否已配置
+    // Edge TTS 和 IndexTTS 免凭据：只要当前提供商为这些，则视为具备"连通性测试许可"
+    if (provider === "edge_tts" || provider === "index_tts") return true;
+    // 腾讯云：后端返回时会将已设置的敏感值脱敏为"***"，以此判断是否已配置
     return Boolean(currentConfig?.secret_id === "***" && currentConfig?.secret_key === "***");
   }, [provider, currentConfig]);
 
@@ -150,6 +155,37 @@ export const TtsSettings: React.FC = () => {
     setTimeout(() => setSaveState("idle"), 2000);
   };
 
+  // 加载 IndexTTS 模型状态
+  const loadIndexTtsStatus = async () => {
+    try {
+      const res = await ttsService.getIndexTtsStatus();
+      if (res?.success) {
+        setIndexTtsStatus(res.data);
+      }
+    } catch (error) {
+      console.error("获取 IndexTTS 状态失败:", error);
+    }
+  };
+
+  // 预加载 IndexTTS 模型
+  const handlePreloadModel = async () => {
+    try {
+      setPreloading(true);
+      const res = await ttsService.preloadIndexTts();
+      if (res?.success) {
+        await loadIndexTtsStatus();
+        await TauriCommands.showNotification("成功", "IndexTTS2 模型加载成功");
+      } else {
+        await TauriCommands.showNotification("错误", res?.error || "模型加载失败");
+      }
+    } catch (error) {
+      console.error("预加载模型失败:", error);
+      await TauriCommands.showNotification("错误", "模型加载失败");
+    } finally {
+      setPreloading(false);
+    }
+  };
+
   // 事件：提供商切换
   const handleProviderChange = async (prov: string) => {
     setProvider(prov);
@@ -158,6 +194,10 @@ export const TtsSettings: React.FC = () => {
       await createOrUpdateDefaultConfig(cid, prov);
     }
     await loadVoices(prov);
+    // 如果切换到 IndexTTS，加载模型状态
+    if (prov === "index_tts") {
+      await loadIndexTtsStatus();
+    }
   };
 
   // 事件：更新凭据（onBlur实时保存）
@@ -236,11 +276,75 @@ export const TtsSettings: React.FC = () => {
 
   
 
+  // 事件：情感控制更新
+  const handleEmotionModeChange = async (mode: "auto" | "manual" | "disabled") => {
+    try {
+      setSaveState("saving");
+      const res = await ttsService.patchConfig(currentConfigId!, {
+        extra_params: {
+          ...currentConfig?.extra_params,
+          emotion_mode: mode,
+        },
+      });
+      if (res?.success) {
+        await refreshConfigs();
+        markSaved();
+      } else {
+        markFailed();
+      }
+    } catch (error) {
+      console.error("更新情感模式失败:", error);
+      markFailed();
+    }
+  };
+
+  const handleEmotionChange = async (emotion: string) => {
+    try {
+      setSaveState("saving");
+      const res = await ttsService.patchConfig(currentConfigId!, {
+        extra_params: {
+          ...currentConfig?.extra_params,
+          default_emotion: emotion,
+        },
+      });
+      if (res?.success) {
+        await refreshConfigs();
+        markSaved();
+      } else {
+        markFailed();
+      }
+    } catch (error) {
+      console.error("更新情感类型失败:", error);
+      markFailed();
+    }
+  };
+
+  const handleEmoAlphaChange = async (alpha: number) => {
+    try {
+      setSaveState("saving");
+      const res = await ttsService.patchConfig(currentConfigId!, {
+        extra_params: {
+          ...currentConfig?.extra_params,
+          emo_alpha: alpha,
+        },
+      });
+      if (res?.success) {
+        await refreshConfigs();
+        markSaved();
+      } else {
+        markFailed();
+      }
+    } catch (error) {
+      console.error("更新情感强度失败:", error);
+      markFailed();
+    }
+  };
+
   // 事件：测试连通性
   const handleTestConnection = async () => {
     try {
-      // Edge TTS 无需凭据；腾讯云需要凭据且需要存在配置ID
-      if (provider !== "edge_tts" && (!hasCredentials || !currentConfigId)) {
+      // Edge TTS 和 IndexTTS 无需凭据；腾讯云需要凭据且需要存在配置ID
+      if (provider !== "edge_tts" && provider !== "index_tts" && (!hasCredentials || !currentConfigId)) {
         setTestResult({
           success: false,
           config_id: currentConfigId || "",
@@ -297,20 +401,104 @@ export const TtsSettings: React.FC = () => {
           />
         </section>
 
-        {/* 凭据设置 */}
-        <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
-          <TtsCredentialForm
-            configId={currentConfigId}
-            config={currentConfig}
-            hasCredentials={hasCredentials}
-            onUpdate={handleCredentialUpdate}
-            onTest={handleTestConnection}
-            testing={testing}
-            testDurationMs={testDurationMs}
-            testResult={testResult}
-            activeConfigId={activeConfigId}
-          />
-        </section>
+        {/* 凭据设置（非 IndexTTS 时显示） */}
+        {provider !== "index_tts" && (
+          <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
+            <TtsCredentialForm
+              configId={currentConfigId}
+              config={currentConfig}
+              hasCredentials={hasCredentials}
+              onUpdate={handleCredentialUpdate}
+              onTest={handleTestConnection}
+              testing={testing}
+              testDurationMs={testDurationMs}
+              testResult={testResult}
+              activeConfigId={activeConfigId}
+            />
+          </section>
+        )}
+
+        {/* IndexTTS 模型状态与情感控制 */}
+        {provider === "index_tts" && (
+          <>
+            {/* 模型状态 */}
+            <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Cpu className="h-5 w-5 text-purple-600" />
+                <h4 className="text-md font-semibold text-gray-900">模型状态</h4>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">模型文件</span>
+                  <span className={`text-sm font-medium ${indexTtsStatus?.available ? "text-green-600" : "text-red-600"}`}>
+                    {indexTtsStatus?.available ? "已就绪" : "未找到"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">加载状态</span>
+                  <span className={`text-sm font-medium ${indexTtsStatus?.loaded ? "text-green-600" : indexTtsStatus?.loading ? "text-yellow-600" : "text-gray-600"}`}>
+                    {indexTtsStatus?.loaded ? "已加载到显存" : indexTtsStatus?.loading ? "加载中..." : "未加载"}
+                  </span>
+                </div>
+                {indexTtsStatus?.error && (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                    错误: {indexTtsStatus.error}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={handlePreloadModel}
+                    disabled={preloading || indexTtsStatus?.loaded || !indexTtsStatus?.available}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {preloading ? (
+                      <span className="flex items-center justify-center">
+                        <Loader className="h-4 w-4 mr-2 animate-spin" />
+                        加载中...
+                      </span>
+                    ) : indexTtsStatus?.loaded ? (
+                      "模型已加载"
+                    ) : (
+                      "预加载模型"
+                    )}
+                  </button>
+                  <button
+                    onClick={handleTestConnection}
+                    disabled={testing || !indexTtsStatus?.available}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {testing ? "测试中..." : "测试可用性"}
+                  </button>
+                </div>
+                {testResult && (
+                  <div className={`mt-2 p-2 rounded text-sm ${testResult.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                    {testResult.message}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  首次加载模型约需 30-60 秒，加载后将常驻显存以加速后续推理
+                </p>
+              </div>
+            </section>
+
+            {/* 情感控制 */}
+            <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="h-5 w-5 text-purple-600" />
+                <h4 className="text-md font-semibold text-gray-900">情感控制</h4>
+              </div>
+              <TtsEmotionSelect
+                emotionMode={(currentConfig?.extra_params?.emotion_mode as "auto" | "manual" | "disabled") || "auto"}
+                selectedEmotion={currentConfig?.extra_params?.default_emotion || "calm"}
+                emoAlpha={currentConfig?.extra_params?.emo_alpha ?? 0.6}
+                onModeChange={handleEmotionModeChange}
+                onEmotionChange={handleEmotionChange}
+                onAlphaChange={handleEmoAlphaChange}
+                disabled={!indexTtsStatus?.available}
+              />
+            </section>
+          </>
+        )}
 
         {/* 音色库 */}
         <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">

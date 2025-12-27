@@ -44,7 +44,7 @@ class TtsEngineConfig(BaseModel):
 
     @validator('provider')
     def validate_provider(cls, v):
-        allowed = ['tencent_tts', 'edge_tts']
+        allowed = ['tencent_tts', 'edge_tts', 'index_tts']
         if v.lower() not in allowed:
             raise ValueError(f'提供商必须是以下之一: {allowed}')
         return v.lower()
@@ -114,6 +114,25 @@ class TtsEngineConfigManager:
                     )
                     missing_defaults.append('edge_tts_default')
 
+                if 'index_tts_default' not in self.configs:
+                    self.configs['index_tts_default'] = TtsEngineConfig(
+                        provider='index_tts',
+                        secret_id=None,
+                        secret_key=None,
+                        region=None,
+                        description='IndexTTS2 本地推理（需要 GPU）',
+                        enabled=False,
+                        active_voice_id='female_sweet',
+                        speed_ratio=1.0,
+                        extra_params={
+                            "emotion_mode": "auto",
+                            "default_emotion": "calm",
+                            "emo_alpha": 0.6,
+                            "use_fp16": True,
+                        }
+                    )
+                    missing_defaults.append('index_tts_default')
+
                 if missing_defaults:
                     self.save_configs()
                     logger.info(f"已补充默认TTS配置: {', '.join(missing_defaults)}")
@@ -141,7 +160,7 @@ class TtsEngineConfigManager:
             raise
 
     def _create_default_configs(self):
-        """创建默认配置：腾讯云TTS与Edge TTS（均未启用）"""
+        """创建默认配置：腾讯云TTS、Edge TTS、IndexTTS2（均未启用）"""
         defaults = [
             (
                 'tencent_tts_default',
@@ -169,6 +188,25 @@ class TtsEngineConfigManager:
                     active_voice_id=None,
                     speed_ratio=1.0,
                     extra_params={}
+                )
+            ),
+            (
+                'index_tts_default',
+                TtsEngineConfig(
+                    provider='index_tts',
+                    secret_id=None,
+                    secret_key=None,
+                    region=None,
+                    description='IndexTTS2 本地推理（需要 GPU）',
+                    enabled=False,
+                    active_voice_id='female_sweet',
+                    speed_ratio=1.0,
+                    extra_params={
+                        "emotion_mode": "auto",
+                        "default_emotion": "calm",
+                        "emo_alpha": 0.6,
+                        "use_fp16": True,
+                    }
                 )
             )
         ]
@@ -231,6 +269,13 @@ class TtsEngineConfigManager:
                 'description': '微软 Edge 在线语音，免凭据，适合中文合成测试与预览',
                 'required_fields': [],
                 'optional_fields': []
+            },
+            {
+                'provider': 'index_tts',
+                'display_name': 'IndexTTS2 本地推理',
+                'description': '高质量零样本语音克隆，支持情感控制，需要 NVIDIA GPU（8GB+ 显存）',
+                'required_fields': [],
+                'optional_fields': ['emotion_mode', 'default_emotion', 'emo_alpha']
             }
         ]
 
@@ -280,6 +325,31 @@ class TtsEngineConfigManager:
                             )
                 else:
                     voices = []
+            elif provider == 'index_tts':
+                # IndexTTS2 本地音色：从 voices_meta.json 读取
+                backend_dir = Path(__file__).parent.parent.parent
+                voices_meta_path = backend_dir / "serviceData" / "index_tts" / "voices_meta.json"
+                if voices_meta_path.exists():
+                    try:
+                        data = json.loads(voices_meta_path.read_text("utf-8"))
+                        for item in data.get("voices", []):
+                            audio_file = item.get("audio_file", "")
+                            voices.append(TtsVoice(
+                                id=item.get("id", ""),
+                                name=item.get("name", ""),
+                                description=item.get("description"),
+                                sample_wav_url=f"/backend/serviceData/index_tts/voices/{audio_file}",
+                                language="zh-CN",
+                                gender=item.get("gender"),
+                                tags=item.get("tags", []),
+                                voice_type=None,
+                                category="IndexTTS2",
+                                voice_quality="Neural",
+                                voice_type_tag="local",
+                                voice_human_style=None,
+                            ))
+                    except Exception as e:
+                        logger.error(f"读取 IndexTTS2 音色元数据失败: {e}")
             elif provider == 'edge_tts':
                 # 避免在事件循环中同步调用异步函数，这里优先读取缓存文件，若无缓存则提供中文音色的回退列表
                 backend_dir = Path(__file__).parent.parent.parent

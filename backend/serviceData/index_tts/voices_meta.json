@@ -1,0 +1,61 @@
+{
+  "voices": [
+    {
+      "id": "male_youth",
+      "name": "青年男声",
+      "description": "年轻活力的男性解说音色，适合轻松娱乐内容",
+      "gender": "male",
+      "tags": ["解说", "青年", "活力"],
+      "audio_file": "male_youth.wav",
+      "sample_text": "大家好，欢迎收看今天的精彩内容！"
+    },
+    {
+      "id": "male_mature",
+      "name": "成熟男声",
+      "description": "沉稳大气的中年男性音色，适合正式解说和纪录片",
+      "gender": "male",
+      "tags": ["解说", "成熟", "稳重"],
+      "audio_file": "male_mature.wav",
+      "sample_text": "接下来，让我们一起走进这段历史。"
+    },
+    {
+      "id": "female_sweet",
+      "name": "甜美女声",
+      "description": "温柔甜美的女性音色，适合情感类和生活类内容",
+      "gender": "female",
+      "tags": ["甜美", "温柔", "亲切"],
+      "audio_file": "female_sweet.wav",
+      "sample_text": "今天给大家分享一个超级治愈的故事。"
+    },
+    {
+      "id": "female_elegant",
+      "name": "知性女声",
+      "description": "优雅知性的女性音色，适合文化、教育类内容",
+      "gender": "female",
+      "tags": ["知性", "优雅", "专业"],
+      "audio_file": "female_elegant.wav",
+      "sample_text": "从专业角度来分析，这个现象背后有着深层的原因。"
+    },
+    {
+      "id": "female_lively",
+      "name": "活泼女声",
+      "description": "活泼俏皮的年轻女性音色，适合娱乐搞笑内容",
+      "gender": "female",
+      "tags": ["活泼", "俏皮", "年轻"],
+      "audio_file": "female_lively.wav",
+      "sample_text": "哇塞！这也太搞笑了吧！你们绝对想不到接下来会发生什么！"
+    },
+    {
+      "id": "child",
+      "name": "童声",
+      "description": "天真可爱的儿童音色，适合童话故事和亲子内容",
+      "gender": "neutral",
+      "tags": ["童声", "可爱", "天真"],
+      "audio_file": "child.wav",
+      "sample_text": "从前从前，在一个美丽的森林里，住着一只小兔子。"
+    }
+  ],
+  "version": "1.0.0",
+  "description": "IndexTTS2 预置音色库"
+}
+

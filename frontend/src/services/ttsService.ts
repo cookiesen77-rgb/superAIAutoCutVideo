@@ -8,6 +8,11 @@ export const ttsService = {
   getVoices: (provider: string) => apiClient.getTtsVoices(provider),
   previewVoice: (voiceId: string, data: any) => apiClient.previewTtsVoice(voiceId, data),
   testConnection: (configId: string) => apiClient.testTtsConnection(configId),
+  // IndexTTS2 专属 API
+  getEmotions: () => apiClient.getTtsEmotions(),
+  getIndexTtsStatus: () => apiClient.getIndexTtsStatus(),
+  preloadIndexTts: () => apiClient.preloadIndexTts(),
+  testIndexTts: () => apiClient.testIndexTts(),
 };
 
 export default ttsService;
