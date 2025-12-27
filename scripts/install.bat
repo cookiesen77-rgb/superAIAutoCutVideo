@@ -22,7 +22,7 @@ echo.
 set PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
 set NPM_MIRROR=https://registry.npmmirror.com
 
-echo   Mirrors: Tsinghua (pip) / Taobao (npm) / ModelScope (model)
+echo   Mirrors: Tsinghua / Taobao / ModelScope
 echo.
 
 :: ========== Find Python ==========
@@ -40,58 +40,45 @@ if not errorlevel 1 (
     if not errorlevel 1 (
         set PYTHON_CMD=python
         set PYTHON_OK=1
-        for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo   [OK] %%i ^(in PATH^)
+        python --version
         goto :found_python
     )
 )
 
 :: Method 2: Search common locations
-echo   Not in PATH, searching installation folders...
+echo   Not in PATH, searching...
 
-:: Check AppData Local (most common for user install)
 for /d %%i in ("%LOCALAPPDATA%\Programs\Python\Python3*") do (
     if exist "%%i\python.exe" (
-        set PYTHON_CMD=%%i\python.exe
+        set "PYTHON_CMD=%%i\python.exe"
         set PYTHON_OK=1
         echo   [OK] Found: %%i
         goto :found_python
     )
 )
 
-:: Check C:\Python3xx
 for /d %%i in ("C:\Python3*") do (
     if exist "%%i\python.exe" (
-        set PYTHON_CMD=%%i\python.exe
+        set "PYTHON_CMD=%%i\python.exe"
         set PYTHON_OK=1
         echo   [OK] Found: %%i
         goto :found_python
     )
 )
 
-:: Check Program Files
 for /d %%i in ("%ProgramFiles%\Python3*") do (
     if exist "%%i\python.exe" (
-        set PYTHON_CMD=%%i\python.exe
+        set "PYTHON_CMD=%%i\python.exe"
         set PYTHON_OK=1
         echo   [OK] Found: %%i
         goto :found_python
     )
 )
 
-:: Not found
 echo   [X] Python not found
 echo.
-echo   ============================================
-echo   Please install Python:
-echo.
-echo   Download (China Mirror):
-echo   https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe
-echo.
-echo   [IMPORTANT] During install, CHECK:
-echo   [x] Add Python to PATH
-echo.
-echo   Then restart this script.
-echo   ============================================
+echo   Download: https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe
+echo   Check: Add Python to PATH
 goto :end
 
 :found_python
@@ -102,23 +89,23 @@ echo   Looking for Node.js...
 
 set NODE_OK=0
 where node >nul 2>&1
-if not errorlevel 1 (
-    for /f "tokens=*" %%i in ('node --version 2^>^&1') do echo   [OK] Node.js %%i
-    set NODE_OK=1
-) else (
-    echo   [X] Node.js not found
-    echo.
-    echo   ============================================
-    echo   Please install Node.js:
-    echo.
-    echo   Download (China Mirror):
-    echo   https://mirrors.huaweicloud.com/nodejs/v20.18.0/node-v20.18.0-x64.msi
-    echo.
-    echo   Official: https://nodejs.org/
-    echo   ============================================
-    goto :end
-)
+if errorlevel 1 goto :no_node
 
+node --version >nul 2>&1
+if errorlevel 1 goto :no_node
+
+echo   [OK] Node.js found
+node --version
+set NODE_OK=1
+goto :check_git
+
+:no_node
+echo   [X] Node.js not found
+echo.
+echo   Download: https://mirrors.huaweicloud.com/nodejs/v20.18.0/node-v20.18.0-x64.msi
+goto :end
+
+:check_git
 :: ========== Check Git ==========
 echo.
 echo   Looking for Git...
@@ -128,7 +115,7 @@ if not errorlevel 1 (
     echo   [OK] Git available
     set GIT_OK=1
 ) else (
-    echo   [!] Git not found (optional for IndexTTS2)
+    echo   [!] Git not found - optional
 )
 
 echo.
@@ -142,15 +129,11 @@ echo [1/6] Creating virtual environment...
 
 cd /d "%~dp0.."
 cd backend
-if not exist "backend" if not exist "modules" (
-    echo   [X] Wrong directory
-    goto :end
-)
 
 if exist "venv\Scripts\activate.bat" (
     echo       Already exists
 ) else (
-    echo       Creating with: !PYTHON_CMD!
+    echo       Creating...
     "!PYTHON_CMD!" -m venv venv
     if errorlevel 1 (
         echo       [X] Failed
@@ -165,7 +148,7 @@ echo [2/6] Configuring pip...
 call venv\Scripts\activate.bat
 python -m pip config set global.index-url %PIP_MIRROR% >nul 2>&1
 python -m pip install --upgrade pip -i %PIP_MIRROR% -q
-echo       [OK] Using Tsinghua mirror
+echo       [OK] Done
 echo.
 
 :: ========== Step 3: Backend packages ==========
@@ -224,14 +207,14 @@ if exist "checkpoints\config.yaml" (
     goto :done
 )
 
-echo       Size: 3-5GB from ModelScope
-echo       Time: 10-30 minutes
+echo       Size: 3-5GB
+echo       Time: 10-30 min
 echo.
 pip install modelscope -i %PIP_MIRROR% -q
 python -c "from modelscope import snapshot_download; snapshot_download('IndexTeam/IndexTTS-1.5', local_dir='./checkpoints')"
 if errorlevel 1 (
-    echo       [!] Failed - download manually:
-    echo       https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
+    echo       [!] Failed
+    echo       Manual: https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
 ) else (
     echo       [OK] Done
 )
@@ -244,9 +227,6 @@ echo                    Installation Complete!
 echo  ============================================================
 echo.
 echo  Start: Double-click scripts\start.bat
-echo.
-echo  Voice files for IndexTTS2:
-echo    Put 6 WAV files in: backend\serviceData\index_tts\voices\
 echo.
 echo ============================================================
 
