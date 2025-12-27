@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 title superAIAutoCutVideo Setup
 color 0A
@@ -6,13 +7,24 @@ color 0A
 echo.
 echo  ============================================================
 echo       superAIAutoCutVideo Installation Script (Windows)
-echo       Using China Mirror Sources - No VPN Required
+echo       Auto-install dependencies with winget
 echo  ============================================================
 echo.
 
 :: China mirror configuration
 set PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
 set NPM_MIRROR=https://registry.npmmirror.com
+
+:: ========== Check winget ==========
+where winget >nul 2>&1
+if errorlevel 1 (
+    set WINGET_OK=0
+    echo   [INFO] winget not available, manual install required
+) else (
+    set WINGET_OK=1
+    echo   [OK] winget available for auto-install
+)
+echo.
 
 :: ========== Environment Check ==========
 echo [Environment Check]
@@ -22,10 +34,23 @@ echo.
 echo   Checking Python...
 where python >nul 2>&1
 if errorlevel 1 (
-    color 0C
     echo   [X] Python not found
     echo.
-    echo   Please install Python 3.10+ first:
+    if "!WINGET_OK!"=="1" (
+        echo   Attempting to install Python automatically...
+        winget install Python.Python.3.11 --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 (
+            echo   [X] Auto-install failed
+            goto :manual_python
+        )
+        echo   [OK] Python installed, please RESTART this script
+        echo.
+        pause
+        exit /b 0
+    )
+    :manual_python
+    color 0C
+    echo   Please install Python 3.10+ manually:
     echo   Download: https://www.python.org/downloads/
     echo.
     echo   IMPORTANT: Check "Add Python to PATH" during installation!
@@ -33,28 +58,65 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
-echo   [OK] Python %PYVER%
+
+:: Get Python version properly
+for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
+echo   [OK] %PYVER%
 
 :: Check Node.js
 echo   Checking Node.js...
 where node >nul 2>&1
 if errorlevel 1 (
-    color 0C
     echo   [X] Node.js not found
     echo.
-    echo   Please install Node.js 18+ first:
+    if "!WINGET_OK!"=="1" (
+        echo   Attempting to install Node.js automatically...
+        winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 (
+            echo   [X] Auto-install failed
+            goto :manual_node
+        )
+        echo   [OK] Node.js installed, please RESTART this script
+        echo.
+        pause
+        exit /b 0
+    )
+    :manual_node
+    color 0C
+    echo   Please install Node.js 18+ manually:
     echo   Download: https://nodejs.org/
     echo.
     pause
     exit /b 1
 )
-for /f %%i in ('node --version 2^>^&1') do set NODEVER=%%i
+
+:: Get Node version
+for /f "tokens=*" %%i in ('node --version 2^>^&1') do set NODEVER=%%i
 echo   [OK] Node.js %NODEVER%
 
-echo   [OK] Using China mirrors (No VPN needed)
+:: Check Git (optional, for IndexTTS)
+echo   Checking Git...
+where git >nul 2>&1
+if errorlevel 1 (
+    echo   [!] Git not found (needed for IndexTTS2)
+    if "!WINGET_OK!"=="1" (
+        echo   Attempting to install Git automatically...
+        winget install Git.Git --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 (
+            echo   [!] Git auto-install failed, IndexTTS2 may not install
+        ) else (
+            echo   [OK] Git installed
+        )
+    )
+) else (
+    echo   [OK] Git available
+)
+
+echo.
+echo   Using China mirrors (No VPN needed)
 echo       pip: Tsinghua University
 echo       npm: Taobao Mirror
+echo       model: ModelScope (Aliyun)
 
 echo.
 echo ============================================================
@@ -100,9 +162,16 @@ echo.
 
 :: ========== Step 4: Install IndexTTS2 ==========
 echo [4/6] Installing IndexTTS2...
-echo       Trying Gitee mirror (China)...
 
-:: Try Gitee mirror first
+:: Check if git is available now
+where git >nul 2>&1
+if errorlevel 1 (
+    echo       [!] Git not available, skipping IndexTTS2
+    echo       You can install it manually later
+    goto :skip_indextts
+)
+
+echo       Trying Gitee mirror (China)...
 pip install git+https://gitee.com/mirrors/index-tts.git -i %PIP_MIRROR% 2>nul
 if errorlevel 1 (
     echo       Gitee failed, trying GitHub...
@@ -110,17 +179,14 @@ if errorlevel 1 (
     if errorlevel 1 (
         color 0E
         echo       [!] IndexTTS2 installation failed
-        echo.
-        echo       Manual install method:
-        echo       1. Download: https://github.com/index-tts/index-tts/archive/refs/heads/main.zip
-        echo       2. Extract and run: pip install .
-        echo.
+        echo       You can install it manually later
     ) else (
         echo       [OK] IndexTTS2 installed (GitHub)
     )
 ) else (
     echo       [OK] IndexTTS2 installed (Gitee mirror)
 )
+:skip_indextts
 echo.
 
 :: ========== Step 5: Install frontend dependencies ==========
@@ -162,10 +228,9 @@ if errorlevel 1 (
     echo.
     echo       [!] Model download failed
     echo.
-    echo       Manual download method:
+    echo       Manual download:
     echo       1. Visit: https://modelscope.cn/models/IndexTeam/IndexTTS-1.5
-    echo       2. Click "Download Model"
-    echo       3. Extract to backend\checkpoints\ folder
+    echo       2. Download all files to backend\checkpoints\
     echo.
 ) else (
     echo       [OK] Model downloaded
@@ -178,22 +243,14 @@ echo  ============================================================
 echo                    Installation Complete!
 echo  ============================================================
 echo.
-echo  How to start:
+echo  To start the app:
 echo    Double-click scripts\start.bat
 echo.
-echo  Or manually:
-echo    Backend: cd backend ^&^& venv\Scripts\activate ^&^& python main.py
-echo    Frontend: cd frontend ^&^& npm run dev
-echo.
 echo  Note:
-echo    1. Prepare 6 voice WAV files for first use
+echo    1. Prepare 6 voice WAV files for IndexTTS2
 echo       Location: backend\serviceData\index_tts\voices\
-echo    2. See docs\IndexTTS2_Guide.md for details
-echo.
-echo  Mirrors used:
-echo    pip:   Tsinghua University (%PIP_MIRROR%)
-echo    npm:   Taobao Mirror (%NPM_MIRROR%)
-echo    Model: ModelScope (Aliyun China)
+echo    2. See docs folder for detailed guide
 echo.
 echo ============================================================
 pause
+endlocal
