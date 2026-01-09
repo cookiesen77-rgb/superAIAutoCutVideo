@@ -18,6 +18,8 @@ export const getDefaultBaseUrl = (provider: string): string => {
     doubao: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
     deepseek: "https://api.deepseek.com/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
+    openai: "https://api.openai.com/v1",
+    gemini: "https://generativelanguage.googleapis.com/v1beta",
   };
   return defaults[provider] || "";
 };
@@ -31,6 +33,8 @@ export const getDefaultModelName = (provider: string): string => {
     doubao: "doubao-vision-pro",
     deepseek: "deepseek-vl-chat",
     openrouter: "openai/gpt-4o-mini",
+    openai: "gpt-4o-mini",
+    gemini: "gemini-1.5-pro",
   };
   return defaults[provider] || "";
 };
@@ -44,6 +48,8 @@ export const getDefaultDescription = (provider: string): string => {
     doubao: "豆包视频生成模型",
     deepseek: "DeepSeek视频生成模型",
     openrouter: "OpenRouter视频生成模型",
+    openai: "OpenAI视频生成模型",
+    gemini: "Gemini视频生成模型",
   };
   return defaults[provider] || "";
 };
@@ -68,6 +74,8 @@ export const getContentDefaultBaseUrl = (provider: string): string => {
     doubao: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
     deepseek: "https://api.deepseek.com/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
+    openai: "https://api.openai.com/v1",
+    gemini: "https://generativelanguage.googleapis.com/v1beta",
   };
   return defaults[provider] || "";
 };
@@ -81,6 +89,8 @@ export const getContentDefaultModelName = (provider: string): string => {
     doubao: "doubao-seed-1-6-251015",
     deepseek: "deepseek-chat",
     openrouter: "openai/gpt-4o-mini",
+    openai: "gpt-4o-mini",
+    gemini: "gemini-1.5-flash",
   };
   return defaults[provider] || "";
 };
@@ -94,6 +104,8 @@ export const getContentDefaultDescription = (provider: string): string => {
     doubao: "豆包文案生成模型",
     deepseek: "DeepSeek文案生成模型",
     openrouter: "OpenRouter文案生成模型（支持结构化输出）",
+    openai: "OpenAI文案生成模型",
+    gemini: "Gemini文案生成模型",
   };
   return defaults[provider] || "";
 };
@@ -145,4 +157,3 @@ export const getSpeedLabel = (speed: number): string => {
   if (speed <= 1.2) return "正常";
   return "较快";
 };
-

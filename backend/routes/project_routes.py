@@ -71,6 +71,23 @@ def to_web_path(p: Path) -> str:
     rel = p.relative_to(root)
     return "/" + str(rel).replace("\\", "/")
 
+def resolve_upload_path(path_str: str) -> Optional[Path]:
+    """将 /uploads/... 路径安全解析为绝对路径（防止路径穿越）"""
+    if not path_str:
+        return None
+    s = path_str.strip()
+    if s.startswith("/"):
+        s = s[1:]
+    if not s.startswith("uploads/"):
+        return None
+    root = project_root_dir().resolve()
+    abs_path = (root / s).resolve()
+    try:
+        abs_path.relative_to(root)
+    except ValueError:
+        return None
+    return abs_path
+
 
 async def ensure_models_ready_for_script(project_id: Optional[str] = None) -> None:
     """在生成脚本前统一校验：
@@ -678,10 +695,11 @@ async def delete_video_file(project_id: str, request: Request, req: Optional[Del
         else:
             target_path = (p.video_path or "").strip() if p.video_path else None
 
+    abs_path: Optional[Path] = None
     if target_path:
-        root = project_root_dir()
-        path_str = target_path
-        abs_path = root / path_str[1:] if path_str.startswith("/") else Path(path_str)
+        abs_path = resolve_upload_path(target_path)
+        if not abs_path:
+            raise HTTPException(status_code=400, detail="文件路径非法")
         try:
             if abs_path.exists() and abs_path.is_file():
                 removed_path = str(abs_path)
@@ -692,17 +710,19 @@ async def delete_video_file(project_id: str, request: Request, req: Optional[Del
 
     # 从列表移除对应项；若未传入路径且是旧逻辑，清空生效路径
     if target_path:
-        # 传入已修剪的路径，确保与存储层中的字符串一致
-        p2 = projects_store.remove_video_path(project_id, target_path)
-        # 若传入的是绝对路径或不同规范，尝试按统一web规范再次移除
-        try:
-            root = project_root_dir()
-            abs_path2 = root / target_path[1:] if target_path.startswith("/") else Path(target_path)
-            web_norm = to_web_path(abs_path2)
+        # 按统一 web 路径移除
+        web_norm = None
+        if abs_path:
+            try:
+                web_norm = to_web_path(abs_path)
+            except Exception:
+                web_norm = None
+        if web_norm:
+            p2 = projects_store.remove_video_path(project_id, web_norm)
             if web_norm != target_path:
-                p2 = projects_store.remove_video_path(project_id, web_norm) or p2
-        except Exception:
-            pass
+                p2 = projects_store.remove_video_path(project_id, target_path) or p2
+        else:
+            p2 = projects_store.remove_video_path(project_id, target_path)
     else:
         p2 = projects_store.clear_video_path(project_id)
     if not p2:

@@ -45,6 +45,9 @@ export const VideoModelSettings: React.FC<VideoModelSettingsProps> = ({
           <option value="qwen">通义千问 (Qwen)</option>
           <option value="doubao">豆包 (Doubao)</option>
           <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
+          <option value="openrouter">OpenRouter</option>
         </select>
         <p className="text-xs text-gray-500 mt-1">
           选择用于视频生成的AI模型提供商
@@ -151,4 +154,3 @@ export const VideoModelSettings: React.FC<VideoModelSettingsProps> = ({
     </div>
   );
 };
-

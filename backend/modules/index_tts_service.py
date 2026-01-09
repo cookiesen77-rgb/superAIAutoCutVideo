@@ -111,6 +111,8 @@ class IndexTtsService:
             return False
         return True
 
+    _model_version: int = 1  # 1 = IndexTTS 1.x, 2 = IndexTTS 2.x
+
     def _ensure_model_loaded(self) -> Any:
         """确保模型已加载（线程安全）"""
         with self._model_lock:
@@ -129,26 +131,45 @@ class IndexTtsService:
             IndexTtsService._load_error = None
 
             try:
-                logger.info(f"开始加载 IndexTTS2 模型: {self.model_dir}")
+                logger.info(f"开始加载 IndexTTS 模型: {self.model_dir}")
 
-                # 动态导入 IndexTTS2
-                from indextts.infer_v2 import IndexTTS2
-
-                model = IndexTTS2(
-                    cfg_path=str(self.cfg_path),
-                    model_dir=str(self.model_dir),
-                    use_fp16=self.use_fp16,
-                    use_cuda_kernel=False,
-                    use_deepspeed=False,
-                )
+                model = None
+                
+                # 尝试 IndexTTS 2.x（需要情感模型）
+                try:
+                    from indextts.infer_v2 import IndexTTS2
+                    model = IndexTTS2(
+                        cfg_path=str(self.cfg_path),
+                        model_dir=str(self.model_dir),
+                        use_fp16=self.use_fp16,
+                        use_cuda_kernel=False,
+                        use_deepspeed=False,
+                    )
+                    IndexTtsService._model_version = 2
+                    logger.info("使用 IndexTTS 2.x 接口")
+                except Exception as e2:
+                    logger.info(f"IndexTTS 2.x 不可用: {e2}, 尝试 1.x")
+                    
+                    # 回退到 IndexTTS 1.x
+                    try:
+                        from indextts.infer import IndexTTS
+                        model = IndexTTS(
+                            cfg_path=str(self.cfg_path),
+                            model_dir=str(self.model_dir),
+                        )
+                        IndexTtsService._model_version = 1
+                        logger.info("使用 IndexTTS 1.x 接口")
+                    except Exception as e1:
+                        logger.error(f"IndexTTS 1.x 也失败: {e1}")
+                        raise RuntimeError(f"无法加载模型: v2={e2}, v1={e1}")
 
                 IndexTtsService._model = model
-                logger.info("IndexTTS2 模型加载成功")
+                logger.info("IndexTTS 模型加载成功")
                 return model
 
             except Exception as e:
                 IndexTtsService._load_error = str(e)
-                logger.error(f"IndexTTS2 模型加载失败: {e}")
+                logger.error(f"IndexTTS 模型加载失败: {e}")
                 raise RuntimeError(f"模型加载失败: {e}")
 
             finally:
@@ -272,28 +293,32 @@ class IndexTtsService:
             loop = asyncio.get_event_loop()
             model = await loop.run_in_executor(None, self._ensure_model_loaded)
 
-            # 构建推理参数
-            infer_kwargs: Dict[str, Any] = {
-                "spk_audio_prompt": str(voice_audio_path),
-                "text": text,
-                "output_path": str(out_path_obj),
-                "verbose": False,
-            }
-
-            # 情感控制
-            if use_emo_text:
-                # 自动根据文本推断情感
-                infer_kwargs["use_emo_text"] = True
-                infer_kwargs["emo_alpha"] = emo_alpha
-            elif emotion and emotion in EMOTION_VECTORS:
-                # 使用指定情感向量
-                infer_kwargs["emo_vector"] = EMOTION_VECTORS[emotion]
-                infer_kwargs["use_random"] = False
-            # 如果 emotion 为 None 或 disabled，则不添加情感控制参数
-
             # 执行推理（在线程池中）
             def do_infer():
-                model.infer(**infer_kwargs)
+                if IndexTtsService._model_version == 2:
+                    # IndexTTS 2.x 接口
+                    infer_kwargs: Dict[str, Any] = {
+                        "spk_audio_prompt": str(voice_audio_path),
+                        "text": text,
+                        "output_path": str(out_path_obj),
+                        "verbose": False,
+                    }
+                    # 情感控制（仅 v2 支持）
+                    if use_emo_text:
+                        infer_kwargs["use_emo_text"] = True
+                        infer_kwargs["emo_alpha"] = emo_alpha
+                    elif emotion and emotion in EMOTION_VECTORS:
+                        infer_kwargs["emo_vector"] = EMOTION_VECTORS[emotion]
+                        infer_kwargs["use_random"] = False
+                    model.infer(**infer_kwargs)
+                else:
+                    # IndexTTS 1.x 接口
+                    model.infer(
+                        audio_prompt=str(voice_audio_path),
+                        text=text,
+                        output_path=str(out_path_obj),
+                        verbose=False,
+                    )
 
             await loop.run_in_executor(None, do_infer)
 

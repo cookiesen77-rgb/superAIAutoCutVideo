@@ -129,3 +129,46 @@ export interface TtsTestResult {
   message: string;
 }
 
+/**
+ * 音色分类
+ */
+export interface VoiceCategory {
+  id: string;
+  name: string;
+  icon: string;
+  is_default: boolean;
+}
+
+/**
+ * 自定义音色
+ */
+export interface CustomVoice {
+  id: string;
+  name: string;
+  category: string;
+  is_preset: boolean;
+  audio_file: string;
+  description: string;
+  duration: number;
+  created_at: string;
+}
+
+/**
+ * 音色上传请求
+ */
+export interface VoiceUploadRequest {
+  name: string;
+  category: string;
+  description?: string;
+  audio: File;
+}
+
+/**
+ * 音色更新请求
+ */
+export interface VoiceUpdateRequest {
+  name?: string;
+  category?: string;
+  description?: string;
+}
+

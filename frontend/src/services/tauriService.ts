@@ -1,1 +1,1 @@
-export { TauriCommands } from "./clients";
+export { DesktopCommands as TauriCommands } from "./desktopBridge";

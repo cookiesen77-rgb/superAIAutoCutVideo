@@ -48,7 +48,9 @@ from routes.content_model_routes import router as content_model_router
 from routes.project_routes import router as project_router
 from routes.tts_routes import router as tts_router
 from routes.prompts_routes import router as prompts_router
+from routes.voice_routes import router as voice_router
 from modules.ws_manager import manager
+from modules.video_processor import video_processor
 
 # 配置日志
 logging.basicConfig(
@@ -68,7 +70,11 @@ logger.info(f"Python 解释器: {sys.executable}")
 # 配置CORS - 允许Tauri前端访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "tauri://localhost",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,6 +87,7 @@ app.include_router(content_model_router)
 app.include_router(project_router)
 app.include_router(tts_router)
 app.include_router(prompts_router)
+app.include_router(voice_router)
 
 def get_app_paths():
     """
@@ -142,6 +149,9 @@ class VideoProcessRequest(BaseModel):
     output_path: str
     settings: Dict = {}
 
+class VideoInfoRequest(BaseModel):
+    video_path: str
+
 class TaskStatus(BaseModel):
     task_id: str
     status: str  # pending, processing, completed, failed
@@ -150,6 +160,8 @@ class TaskStatus(BaseModel):
 
 # 全局任务状态存储
 tasks_status: Dict[str, TaskStatus] = {}
+tasks_updated_at: Dict[str, float] = {}
+TASK_TTL_SECONDS = 60 * 60
 
 # 全局变量存储当前服务器配置
 current_server_config = {
@@ -232,6 +244,7 @@ async def process_video(request: VideoProcessRequest):
             message="任务已创建，等待处理"
         )
         tasks_status[task_id] = task_status
+        tasks_updated_at[task_id] = time.time()
         
         logger.info(f"创建视频处理任务: {task_id}")
         
@@ -247,6 +260,42 @@ async def process_video(request: VideoProcessRequest):
     except Exception as e:
         logger.error(f"创建视频处理任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/process")
+async def process_video_compat(request: VideoProcessRequest):
+    """兼容旧接口"""
+    return await process_video(request)
+
+def _resolve_video_info_path(path_str: str) -> Path:
+    s = (path_str or "").strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="视频路径不能为空")
+    root = Path(__file__).resolve().parent.parent
+    if s.startswith("/uploads/") or s.startswith("uploads/"):
+        rel = s[1:] if s.startswith("/") else s
+        p = (root / rel).resolve()
+        try:
+            p.relative_to(root)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="视频路径非法")
+    else:
+        p = Path(s).expanduser()
+        if not p.is_absolute():
+            p = (root / p).resolve()
+    if not p.exists() or not p.is_file():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+    return p
+
+@app.post("/api/video/info")
+async def get_video_info(req: VideoInfoRequest):
+    """获取视频基础信息（时长/容器格式）"""
+    path = _resolve_video_info_path(req.video_path)
+    duration = await video_processor._ffprobe_duration(str(path), "format")
+    fmt = await video_processor._ffprobe_format_name(str(path))
+    return {
+        "duration": duration,
+        "format": fmt,
+    }
 
 @app.get("/api/task/{task_id}")
 async def get_task_status(task_id: str):
@@ -290,11 +339,13 @@ async def simulate_video_processing(task_id: str, request: VideoProcessRequest):
         task = tasks_status[task_id]
         task.status = "processing"
         task.message = "开始处理视频"
+        tasks_updated_at[task_id] = time.time()
         
         # 模拟处理进度
         for progress in range(0, 101, 10):
             task.progress = float(progress)
             task.message = f"处理进度: {progress}%"
+            tasks_updated_at[task_id] = time.time()
             
             # 通过WebSocket广播进度
             progress_message = {
@@ -313,6 +364,7 @@ async def simulate_video_processing(task_id: str, request: VideoProcessRequest):
         task.status = "completed"
         task.progress = 100.0
         task.message = "视频处理完成"
+        tasks_updated_at[task_id] = time.time()
         
         completion_message = {
             "type": "completed",
@@ -331,6 +383,7 @@ async def simulate_video_processing(task_id: str, request: VideoProcessRequest):
         if task:
             task.status = "failed"
             task.message = f"处理失败: {str(e)}"
+            tasks_updated_at[task_id] = time.time()
             
             error_message = {
                 "type": "error",
@@ -344,6 +397,17 @@ async def send_periodic_heartbeat():
     """定期发送心跳消息"""
     while True:
         try:
+            now_ts = time.time()
+            for tid in list(tasks_status.keys()):
+                task = tasks_status.get(tid)
+                if not task:
+                    tasks_updated_at.pop(tid, None)
+                    continue
+                if task.status in ("completed", "failed"):
+                    last = tasks_updated_at.get(tid, now_ts)
+                    if now_ts - last > TASK_TTL_SECONDS:
+                        tasks_status.pop(tid, None)
+                        tasks_updated_at.pop(tid, None)
             heartbeat_message = {
                 "type": "heartbeat",
                 "timestamp": datetime.now().isoformat(),

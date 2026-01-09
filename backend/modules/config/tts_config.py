@@ -218,7 +218,7 @@ class TtsEngineConfigManager:
         """更新配置，确保同时只有一个配置被启用"""
         try:
             if config_id not in self.configs:
-                raise ValueError(f"配置ID '{config_id}' 不存在")
+                logger.info(f"配置ID '{config_id}' 不存在，创建新配置")
 
             # 若启用该配置，则禁用其他配置
             if config.enabled:

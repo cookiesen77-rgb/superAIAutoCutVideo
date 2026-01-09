@@ -4,6 +4,7 @@ import {
     Settings
 } from 'lucide-react'
 import React from 'react'
+import { DesktopCommands } from '@/services/desktopBridge'
 // @ts-expect-error asset import via Vite alias
 import Logo from '@/assets/logo.png'
 
@@ -78,7 +79,7 @@ const Navigation: React.FC<NavigationProps> = ({
           <div className="flex items-center space-x-3">
             {/* GitHub链接 */}
             <button
-              onClick={() => window.open('https://github.com/xiaohu2206/superAIAutoCutVideo', '_blank')}
+              onClick={() => DesktopCommands.openExternalLink('https://github.com/cookiesen77-rgb/superAIAutoCutVideo')}
               className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
               title="查看源代码"
             >

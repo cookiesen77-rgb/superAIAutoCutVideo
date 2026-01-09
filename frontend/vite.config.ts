@@ -5,12 +5,13 @@ import { defineConfig } from 'vite'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  base: './',
   
   // 开发服务器配置
   server: {
     port: 1420,
     host: '0.0.0.0',
-    strictPort: Boolean(process.env.TAURI_DEV),
+    strictPort: true,
   },
 
   // 构建配置

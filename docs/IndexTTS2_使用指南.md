@@ -160,13 +160,4 @@ npm run dev
 
 ---
 
-## 六、技术支持
-
-如有问题，请联系开发者或查阅：
-- IndexTTS 官方文档：https://github.com/index-tts/index-tts
-- 项目 Issues：[项目仓库地址]
-
----
-
 *文档版本：1.0.0 | 更新日期：2025-12-27*
-

@@ -4,7 +4,7 @@ import { WebSocketMessage } from "../../../services/clients";
 
 interface MonitorSectionProps {
   messages: WebSocketMessage[];
-  backendStatus: { running: boolean; port: number; pid?: number };
+  backendStatus: { running: boolean; baseUrl: string };
   connections: { api: boolean; websocket: boolean };
 }
 

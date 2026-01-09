@@ -1,30 +1,67 @@
-// API客户端 - 处理与FastAPI后端的通信
-import { invoke } from "@tauri-apps/api/core";
+// API客户端 - 处理与后端API的通信
 
-// API基础配置（默认端口，运行时可通过 configureBackend 动态覆盖）
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8000;
-const API_BASE_URL = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
-const WS_BASE_URL = `ws://${DEFAULT_HOST}:${DEFAULT_PORT}`;
+const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || "http://localhost:8000";
+const RAW_WS_BASE = (import.meta.env.VITE_WS_BASE_URL as string | undefined) || "";
+const API_BASE_URL = RAW_API_BASE.replace(/\/+$/, "");
+const WS_BASE_URL = (RAW_WS_BASE || API_BASE_URL.replace(/^http/, "ws")).replace(/\/+$/, "");
+const WS_ENDPOINT = WS_BASE_URL ? `${WS_BASE_URL}/ws` : "";
 
-// 类型定义
-export interface BackendStatus {
-  running: boolean;
-  port: number;
-  pid?: number;
+const AUTH_STORAGE_KEY = "superai.auth.tokens";
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
 }
 
+export interface AuthTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type?: string;
+}
+
+export interface AuthUserInfo {
+  user_id: string;
+  email?: string;
+  is_admin?: boolean;
+  status?: string;
+}
+
+export function getStoredTokens(): AuthTokens | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthTokens;
+    if (!parsed?.accessToken || !parsed?.refreshToken || !parsed?.expiresAt) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredTokens(tokens: AuthTokens | null): void {
+  try {
+    if (!tokens) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(tokens));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function isTokenExpired(tokens: AuthTokens | null): boolean {
+  if (!tokens) return true;
+  return Date.now() >= tokens.expiresAt - 30_000;
+}
+
+// 类型定义
 export interface ApiResponse<T = any> {
   message: string;
   data?: T;
   timestamp: string;
-}
-
-export interface ServerInfoData {
-  host: string;
-  port: number;
-  started_at: string;
-  status: string;
 }
 
 export interface TaskStatus {
@@ -68,20 +105,35 @@ export class ApiClient {
   // 通用请求方法
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: (RequestInit & { skipAuth?: boolean; _retry?: boolean }) = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+
+    const { skipAuth, _retry, ...fetchOptions } = options;
+    const tokens = getStoredTokens();
+    const authHeader = !skipAuth && tokens?.accessToken
+      ? { Authorization: `Bearer ${tokens.accessToken}` }
+      : {};
 
     const defaultOptions: RequestInit = {
       headers: {
         "Content-Type": "application/json",
-        ...options.headers,
+        ...authHeader,
+        ...(fetchOptions.headers || {}),
       },
-      ...options,
+      ...fetchOptions,
     };
 
     try {
       const response = await fetch(url, defaultOptions);
+
+      if (response.status === 401 && !skipAuth && !_retry && tokens?.refreshToken) {
+        const refreshed = await this.refreshTokens(tokens.refreshToken);
+        if (refreshed) {
+          setStoredTokens(refreshed);
+          return this.request<T>(endpoint, { ...options, _retry: true });
+        }
+      }
 
       if (!response.ok) {
         // 尝试从后端错误响应中提取更明确的提示信息（detail 或 message）
@@ -107,11 +159,36 @@ export class ApiClient {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : ((await response.text()) as any);
       return data;
     } catch (error) {
       console.error(`API请求失败 [${endpoint}]:`, error);
       throw error;
+    }
+  }
+
+  private async refreshTokens(refreshToken: string): Promise<AuthTokens | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as AuthTokenResponse;
+      if (!data?.access_token || !data?.refresh_token || !data?.expires_in) {
+        return null;
+      }
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresAt: Date.now() + data.expires_in * 1000,
+      };
+    } catch {
+      return null;
     }
   }
 
@@ -141,13 +218,97 @@ export class ApiClient {
     return this.request<T>(endpoint, { method: "DELETE" });
   }
 
+  private normalizeTokenResponse(data: AuthTokenResponse): AuthTokens {
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    };
+  }
+
+  async register(email: string, password: string): Promise<AuthTokens> {
+    const data = await this.request<AuthTokenResponse>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+      skipAuth: true,
+    });
+    const tokens = this.normalizeTokenResponse(data);
+    setStoredTokens(tokens);
+    return tokens;
+  }
+
+  async login(email: string, password: string): Promise<AuthTokens> {
+    const data = await this.request<AuthTokenResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+      skipAuth: true,
+    });
+    const tokens = this.normalizeTokenResponse(data);
+    setStoredTokens(tokens);
+    return tokens;
+  }
+
+  async logout(): Promise<void> {
+    const tokens = getStoredTokens();
+    if (tokens?.refreshToken) {
+      await this.request("/api/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refresh_token: tokens.refreshToken }),
+        skipAuth: true,
+      });
+    }
+    setStoredTokens(null);
+  }
+
+  async me(): Promise<AuthUserInfo> {
+    return this.get<AuthUserInfo>("/api/auth/me");
+  }
+
+  async getAdminUsers(limit = 20, offset = 0): Promise<any> {
+    const params = new URLSearchParams();
+    if (limit > 0) params.set("limit", String(limit));
+    if (offset > 0) params.set("offset", String(offset));
+    const query = params.toString();
+    return this.get(`/api/admin/users${query ? `?${query}` : ""}`);
+  }
+
+  async getAdminUser(userId: string): Promise<any> {
+    return this.get(`/api/admin/users/${encodeURIComponent(userId)}`);
+  }
+
+  async updateAdminUser(
+    userId: string,
+    payload: { email?: string; is_admin?: boolean; status?: string }
+  ): Promise<any> {
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async resetAdminPassword(userId: string, password: string): Promise<any> {
+    return this.post(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+      password,
+    });
+  }
+
+  async getAdminUserUsage(userId: string): Promise<any> {
+    return this.get(`/api/admin/users/${encodeURIComponent(userId)}/usage`);
+  }
+
+  async updateAdminUserPlan(userId: string, planId: string): Promise<any> {
+    return this.post(`/api/admin/users/${encodeURIComponent(userId)}/plan`, {
+      plan_id: planId,
+    });
+  }
+
   // 测试连接
   async testConnection(): Promise<boolean> {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1000); // 1秒超时
 
-      const url = `${this.baseUrl}/api/hello`;
+      const url = `${this.baseUrl}/api/health`;
       const response = await fetch(url, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -163,12 +324,12 @@ export class ApiClient {
 
   // 获取Hello消息
   async getHello(): Promise<ApiResponse> {
-    return this.get<ApiResponse>("/api/hello");
+    return this.get<ApiResponse>("/api/health");
   }
 
   // 获取服务状态
   async getStatus(): Promise<any> {
-    return this.get("/api/status");
+    return this.get("/api/health");
   }
 
   // 获取视频信息
@@ -182,7 +343,7 @@ export class ApiClient {
   async processVideo(
     request: VideoProcessRequest
   ): Promise<{ task_id: string }> {
-    return this.post<{ task_id: string }>("/api/process", request);
+    return this.post<{ task_id: string }>("/api/video/process", request);
   }
 
   // 获取任务状态
@@ -299,6 +460,123 @@ export class ApiClient {
   async testIndexTts(): Promise<any> {
     return this.post('/api/tts/index-tts/test');
   }
+
+  // ===== 音色管理 API =====
+  // 获取音色分类列表
+  async getVoiceCategories(): Promise<any> {
+    return this.get('/api/voices/categories');
+  }
+
+  // 创建音色分类
+  async createVoiceCategory(name: string, icon: string): Promise<any> {
+    return this.post('/api/voices/categories', { name, icon });
+  }
+
+  // 更新音色分类
+  async updateVoiceCategory(id: string, name?: string, icon?: string): Promise<any> {
+    return this.request(`/api/voices/categories/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name, icon }),
+    });
+  }
+
+  // 删除音色分类
+  async deleteVoiceCategory(id: string): Promise<any> {
+    return this.delete(`/api/voices/categories/${encodeURIComponent(id)}`);
+  }
+
+  // 获取自定义音色列表
+  async getCustomVoices(category?: string): Promise<any> {
+    const params = category ? `?category=${encodeURIComponent(category)}` : '';
+    return this.get(`/api/voices${params}`);
+  }
+
+  // 获取单个音色详情
+  async getCustomVoice(id: string): Promise<any> {
+    return this.get(`/api/voices/${encodeURIComponent(id)}`);
+  }
+
+  // 上传音色
+  async uploadVoice(data: { name: string; category: string; description?: string; audio: File }): Promise<any> {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('category', data.category);
+    formData.append('description', data.description || '');
+    formData.append('audio', data.audio);
+
+    const url = `${this.baseUrl}/api/voices/upload`;
+    const tokens = getStoredTokens();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.detail || errJson.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 上传录音
+  async uploadRecording(data: { name: string; category: string; description?: string; audio: File }): Promise<any> {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('category', data.category);
+    formData.append('description', data.description || '');
+    formData.append('audio', data.audio);
+
+    const url = `${this.baseUrl}/api/voices/record`;
+    const tokens = getStoredTokens();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.detail || errJson.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 更新音色信息
+  async updateVoice(id: string, data: { name?: string; category?: string; description?: string }): Promise<any> {
+    return this.request(`/api/voices/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 删除音色
+  async deleteVoice(id: string): Promise<any> {
+    return this.delete(`/api/voices/${encodeURIComponent(id)}`);
+  }
+
+  // 生成音色试听
+  async generateVoicePreview(id: string, text?: string): Promise<Blob> {
+    const url = `${this.baseUrl}/api/voices/${encodeURIComponent(id)}/preview`;
+    const tokens = getStoredTokens();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : {}),
+      },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.detail || errJson.message || `HTTP ${response.status}`);
+    }
+
+    return response.blob();
+  }
 }
 
 // WebSocket客户端类
@@ -310,7 +588,7 @@ export class WebSocketClient {
   private reconnectDelay = 1000;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
-  constructor(url: string = `${WS_BASE_URL}/ws`) {
+  constructor(url: string = WS_ENDPOINT) {
     this.url = url;
   }
 
@@ -322,6 +600,10 @@ export class WebSocketClient {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        if (!this.url) {
+          reject(new Error("WebSocket URL 未配置"));
+          return;
+        }
         console.log("正在连接WebSocket:", this.url);
         this.ws = new WebSocket(this.url);
 
@@ -452,65 +734,9 @@ export class WebSocketClient {
 }
 
 // Tauri命令包装器
-export class TauriCommands {
-  // 启动后端
-  static async startBackend(): Promise<BackendStatus> {
-    return invoke<BackendStatus>("start_backend");
-  }
-
-  // 停止后端
-  static async stopBackend(): Promise<boolean> {
-    return invoke<boolean>("stop_backend");
-  }
-
-  // 获取后端状态
-  static async getBackendStatus(): Promise<BackendStatus> {
-    return invoke<BackendStatus>("get_backend_status");
-  }
-
-  // 选择视频文件
-  static async selectVideoFile(): Promise<{
-    path?: string;
-    cancelled: boolean;
-  }> {
-    return invoke("select_video_file");
-  }
-
-  // 选择输出目录
-  static async selectOutputDirectory(): Promise<{
-    path?: string;
-    cancelled: boolean;
-  }> {
-    return invoke("select_output_directory");
-  }
-
-  // 获取应用信息
-  static async getAppInfo(): Promise<Record<string, string>> {
-    return invoke("get_app_info");
-  }
-
-  // 显示通知
-  static async showNotification(title: string, body: string): Promise<void> {
-    return invoke("show_notification", { title, body });
-  }
-
-  // 打开外部链接
-  static async openExternalLink(url: string): Promise<void> {
-    return invoke("open_external_link", { url });
-  }
-}
-
 // 导出单例实例
 export const apiClient = new ApiClient();
 export const wsClient = new WebSocketClient();
-
-// 运行时配置：根据端口动态更新 API 与 WS 端点
-export function configureBackend(port: number, host: string = DEFAULT_HOST) {
-  const httpBase = `http://${host}:${port}`;
-  const wsBase = `ws://${host}:${port}/ws`;
-  apiClient.setBaseUrl(httpBase);
-  wsClient.setUrl(wsBase);
-}
 
 // 工具函数
 export const utils = {
@@ -562,61 +788,4 @@ export const utils = {
 
     throw lastError!;
   },
-
-  // 端口发现功能
-  async discoverBackendPort(
-    host: string = DEFAULT_HOST,
-    startPort: number = DEFAULT_PORT,
-    maxAttempts: number = 20
-  ): Promise<{ port: number; host: string } | null> {
-    for (let i = 0; i < maxAttempts; i++) {
-      const port = startPort + i;
-      const testUrl = `http://${host}:${port}/api/server/info`;
-
-      try {
-        const response = await fetch(testUrl, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(800), // 缩短到800毫秒超时
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data && data.data.port) {
-            console.log(`发现后端服务运行在 ${host}:${port}`);
-            return { port: data.data.port, host };
-          }
-        }
-      } catch (error) {
-        // 忽略连接错误，继续尝试下一个端口
-        console.debug(`端口 ${port} 连接失败:`, error);
-      }
-    }
-
-    console.warn(
-      `无法在 ${host}:${startPort}-${
-        startPort + maxAttempts - 1
-      } 范围内发现后端服务`
-    );
-    return null;
-  },
 };
-
-// 自动配置后端连接
-export async function autoConfigureBackend(
-  host: string = DEFAULT_HOST,
-  startPort: number = DEFAULT_PORT
-): Promise<boolean> {
-  try {
-    const discovered = await utils.discoverBackendPort(host, startPort);
-    if (discovered) {
-      configureBackend(discovered.port, discovered.host);
-      console.log(`自动配置后端连接: ${discovered.host}:${discovered.port}`);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error("自动配置后端连接失败:", error);
-    return false;
-  }
-}

@@ -6,7 +6,7 @@ import type {
   UpdateProjectRequest,
   VideoScript,
 } from "../types/project";
-import { apiClient, type ApiResponse } from "./clients";
+import { apiClient, getStoredTokens, type ApiResponse } from "./clients";
 
 /**
  * 项目管理服务类
@@ -116,6 +116,10 @@ export class ProjectService {
         "POST",
         `${apiClient.getBaseUrl()}/api/projects/${projectId}/upload/video`
       );
+      const tokens = getStoredTokens();
+      if (tokens?.accessToken) {
+        xhr.setRequestHeader("Authorization", `Bearer ${tokens.accessToken}`);
+      }
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {
@@ -175,6 +179,10 @@ export class ProjectService {
         "POST",
         `${apiClient.getBaseUrl()}/api/projects/${projectId}/upload/subtitle`
       )
+      const tokens = getStoredTokens();
+      if (tokens?.accessToken) {
+        xhr.setRequestHeader("Authorization", `Bearer ${tokens.accessToken}`);
+      }
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {

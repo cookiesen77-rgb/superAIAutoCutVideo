@@ -151,7 +151,11 @@ class VideoProcessor:
                     lines = []
                     for p in inputs:
                         q = Path(p).as_posix()
-                        lines.append(f"file '{q}'")
+                        escaped = self._escape_concat_path(q)
+                        if escaped is None:
+                            copy_possible = False
+                            break
+                        lines.append(f"file {escaped}")
                     list_path.write_text("\n".join(lines), encoding="utf-8")
                     can_concat_demuxer = True
                 except Exception:
@@ -717,6 +721,17 @@ class VideoProcessor:
                 return None
         except Exception:
             return None
+
+    def _escape_concat_path(self, path_str: str) -> Optional[str]:
+        # Avoid newlines which would break the concat list format.
+        if "\n" in path_str or "\r" in path_str:
+            return None
+        escaped = []
+        for ch in path_str:
+            if ch in ["\\", " ", "'", "#", ";"]:
+                escaped.append("\\")
+            escaped.append(ch)
+        return "".join(escaped)
 
     async def replace_audio_with_narration(self, video_path: str, narration_path: str, output_path: str) -> bool:
         try:

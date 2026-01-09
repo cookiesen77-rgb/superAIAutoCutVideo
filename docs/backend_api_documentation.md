@@ -1,5 +1,7 @@
 # 视频剪辑项目管理系统 - 后端 API 开发文档
 
+> 说明：此文档为旧版本地后端（Python）规范参考。云端 Go API 请查看 `docs/cloud_api.md`。
+
 ## 概述
 
 本文档详细描述了视频剪辑项目管理系统的后端 API 接口规范，包括项目管理、文件上传、脚本生成等核心功能。
@@ -1037,15 +1039,6 @@ curl -X GET http://localhost:8000/api/projects
   - 文件上传功能
   - AI 脚本生成功能
   - 脚本编辑和保存功能
-
----
-
-## 联系方式
-
-如有技术问题或建议，请联系：
-
-- 开发团队邮箱: dev@example.com
-- 项目仓库: https://github.com/example/video-project
 
 ---
 

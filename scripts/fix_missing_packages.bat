@@ -1,4 +1,12 @@
 @echo off
+
+:: Prevent flash close
+if "%~1"=="" (
+    cmd /k "%~f0" run
+    exit /b
+)
+
+setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 title Fix Missing Packages
 color 0E
@@ -13,65 +21,55 @@ cd /d "%~dp0.."
 cd backend
 
 if not exist "venv\Scripts\activate.bat" (
-    echo   [X] Virtual environment not found
-    echo   Please run install.bat first
-    pause
-    exit /b 1
+    echo   [X] Virtual environment not found!
+    echo   Please run install.bat first.
+    goto :end
 )
 
 call venv\Scripts\activate.bat
 
-:: Check Python version
-python --version
+echo   Using mirror: Tsinghua University
+echo.
+set PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
+
+echo   [1/7] Core packages...
+pip install fastapi uvicorn[standard] pydantic httpx -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [2/7] Media packages...
+pip install opencv-python ffmpeg-python Pillow -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [3/7] PyTorch (this may take a while)...
+pip install torch torchvision numpy -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [4/7] Web packages...
+pip install websockets python-multipart aiohttp requests -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [5/7] TTS packages...
+pip install edge-tts pypinyin cn2an pyyaml soundfile librosa -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [6/7] AI packages...
+pip install transformers accelerate modelscope huggingface_hub -i %PIP_MIRROR% -q
+echo         Done
+
+echo   [7/7] Other packages...
+pip install python-dotenv loguru psutil tencentcloud-sdk-python -i %PIP_MIRROR% -q
+echo         Done
+
+echo.
+echo  ============================================================
+echo                    Packages Fixed!
+echo  ============================================================
+echo.
+echo   If IndexTTS2 is still missing, run:
+echo   scripts\install_indextts.bat
 echo.
 
-echo   Installing core packages (pre-built wheels)...
+:end
 echo.
-
-:: Install packages one by one with specific versions that have wheels
-pip install --only-binary :all: numpy -i https://pypi.tuna.tsinghua.edu.cn/simple 2>nul
-if errorlevel 1 (
-    echo   [!] numpy wheel not available for your Python version
-    echo   Trying older version...
-    pip install "numpy<2.0" -i https://pypi.tuna.tsinghua.edu.cn/simple
-)
-
-pip install uvicorn -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install pydantic -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install aiohttp -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install httpx -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install python-multipart -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install aiofiles -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install requests -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install edge-tts -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-echo.
-echo   ============================================================
-echo.
-
-:: Check if numpy failed
-python -c "import numpy" 2>nul
-if errorlevel 1 (
-    color 0C
-    echo   [X] numpy installation failed
-    echo.
-    echo   Your Python version (3.14) is too new!
-    echo   numpy does not have pre-built packages for Python 3.14
-    echo.
-    echo   SOLUTION:
-    echo   1. Uninstall Python 3.14
-    echo   2. Install Python 3.11:
-    echo      https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe
-    echo   3. Delete backend\venv folder
-    echo   4. Run install.bat again
-    echo.
-) else (
-    color 0A
-    echo   [OK] All packages installed!
-    echo.
-    echo   Now try running start.bat
-    echo.
-)
-
 pause
+endlocal

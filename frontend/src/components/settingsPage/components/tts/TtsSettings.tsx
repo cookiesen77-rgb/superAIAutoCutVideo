@@ -7,6 +7,7 @@ import { TtsEngineSelect } from "../../components/tts/TtsEngineSelect";
 import { TtsSpeedSlider } from "../../components/tts/TtsSpeedSlider";
 import { TtsVoiceGallery } from "../../components/tts/TtsVoiceGallery";
 import { TtsEmotionSelect } from "../../components/tts/TtsEmotionSelect";
+import { VoiceManager } from "../../components/tts/VoiceManager";
 import type { TtsEngineConfig, TtsEngineMeta, TtsTestResult, TtsVoice, IndexTtsStatus } from "../../types";
 import { getSpeedLabel, getTtsConfigIdByProvider } from "../../utils";
  
@@ -166,6 +167,13 @@ export const TtsSettings: React.FC = () => {
       console.error("获取 IndexTTS 状态失败:", error);
     }
   };
+
+  // 当 provider 变化时，如果是 index_tts 则加载状态
+  useEffect(() => {
+    if (provider === "index_tts") {
+      loadIndexTtsStatus();
+    }
+  }, [provider]);
 
   // 预加载 IndexTTS 模型
   const handlePreloadModel = async () => {
@@ -500,66 +508,75 @@ export const TtsSettings: React.FC = () => {
           </>
         )}
 
-        {/* 音色库 */}
-        <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-md font-semibold text-gray-900">音色库</h4>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索音色..."
-              className="px-3 py-2 border border-gray-300 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        {/* 音色库 - IndexTTS 使用独立管理组件 */}
+        {provider === "index_tts" ? (
+          <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
+            <VoiceManager
+              activeVoiceId={currentConfig?.active_voice_id || null}
+              onSelectVoice={handleSetActiveVoice}
             />
-          </div>
-          {activeVoiceDetail.id && (
-            <div className="mb-3 border border-blue-100 bg-blue-50 rounded-lg p-3 text-xs text-gray-800">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">当前激活：</span>
-                {activeVoiceDetail.name && (
-                  <LabeledChip label="名称" value={activeVoiceDetail.name} variant="blue" />
-                )}
-                {activeVoiceDetail.gender && (
-                  <LabeledChip label="性别" value={getGenderLabel(activeVoiceDetail.gender)} variant="white" />
-                )}
-                {activeVoiceDetail.typeTag && (
-                  <LabeledChip label="类型标签" value={activeVoiceDetail.typeTag} variant="white" />
-                )}
-                {activeVoiceDetail.style && (
-                  <LabeledChip label="风格" value={activeVoiceDetail.style} variant="white" />
-                )}
-                {(() => {
-                  const statusText = hasCredentials
-                    ? (testResult?.success === false ? "异常" : "健康")
-                    : "降级";
-                  const cls = statusText === "健康" ? "text-green-600" : statusText === "降级" ? "text-orange-600" : "text-red-600";
-                  return (
-                    <>
-                      <LabeledChip label="连通性" value={<span className={cls}>{statusText}</span>} variant="white" />
-                      {typeof testDurationMs === "number" && (
-                        <span className="text-[11px] text-gray-500">响应 {testDurationMs}ms</span>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
+          </section>
+        ) : (
+          <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-md font-semibold text-gray-900">音色库</h4>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索音色..."
+                className="px-3 py-2 border border-gray-300 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
             </div>
-          )}
-          <div className="h-80 overflow-y-auto pr-1">
-          <TtsVoiceGallery
-            voices={voices.filter((v) =>
-              (v.name + v.id + (v.description || "")).toLowerCase().includes(search.toLowerCase())
+            {activeVoiceDetail.id && (
+              <div className="mb-3 border border-blue-100 bg-blue-50 rounded-lg p-3 text-xs text-gray-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">当前激活：</span>
+                  {activeVoiceDetail.name && (
+                    <LabeledChip label="名称" value={activeVoiceDetail.name} variant="blue" />
+                  )}
+                  {activeVoiceDetail.gender && (
+                    <LabeledChip label="性别" value={getGenderLabel(activeVoiceDetail.gender)} variant="white" />
+                  )}
+                  {activeVoiceDetail.typeTag && (
+                    <LabeledChip label="类型标签" value={activeVoiceDetail.typeTag} variant="white" />
+                  )}
+                  {activeVoiceDetail.style && (
+                    <LabeledChip label="风格" value={activeVoiceDetail.style} variant="white" />
+                  )}
+                  {(() => {
+                    const statusText = hasCredentials
+                      ? (testResult?.success === false ? "异常" : "健康")
+                      : "降级";
+                    const cls = statusText === "健康" ? "text-green-600" : statusText === "降级" ? "text-orange-600" : "text-red-600";
+                    return (
+                      <>
+                        <LabeledChip label="连通性" value={<span className={cls}>{statusText}</span>} variant="white" />
+                        {typeof testDurationMs === "number" && (
+                          <span className="text-[11px] text-gray-500">响应 {testDurationMs}ms</span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             )}
-            activeVoiceId={currentConfig?.active_voice_id || ""}
-            configId={currentConfigId}
-            provider={provider}
-            hasCredentials={hasCredentials}
-            testResult={testResult}
-            testDurationMs={testDurationMs}
-            onSetActive={handleSetActiveVoice}
-          />
-          </div>
-        </section>
+            <div className="h-80 overflow-y-auto pr-1">
+            <TtsVoiceGallery
+              voices={voices.filter((v) =>
+                (v.name + v.id + (v.description || "")).toLowerCase().includes(search.toLowerCase())
+              )}
+              activeVoiceId={currentConfig?.active_voice_id || ""}
+              configId={currentConfigId}
+              provider={provider}
+              hasCredentials={hasCredentials}
+              testResult={testResult}
+              testDurationMs={testDurationMs}
+              onSetActive={handleSetActiveVoice}
+            />
+            </div>
+          </section>
+        )}
 
         {/* 语速 */}
         <section className="bg-white/80 backdrop-blur border rounded-xl p-5 shadow-sm">

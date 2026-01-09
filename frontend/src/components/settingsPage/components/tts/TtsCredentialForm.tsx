@@ -118,8 +118,8 @@ export const TtsCredentialForm: React.FC<Props> = ({
           <div className={`inline-flex items-center text-sm ${testResult.success ? "text-green-600" : "text-red-600"}`}>
             {testResult.success ? <ShieldCheck className="h-4 w-4 mr-1" /> : <ShieldAlert className="h-4 w-4 mr-1" />}
             {testResult.success
-              ? `${config?.provider === "edge_tts" ? "Edge TTS 服务可用" : "已连接腾讯云 TTS"}（响应 ${testDurationMs ?? "--"}ms）`
-              : `${config?.provider === "edge_tts" ? "连通性测试失败，请稍后重试" : "鉴权失败，请检查 SecretId/SecretKey"}`}
+              ? `${config?.provider || "TTS"} 服务可用（响应 ${testDurationMs ?? "--"}ms）`
+              : `${config?.provider || "TTS"} 连接失败，请检查凭据或稍后重试`}
           </div>
         )}
       </div>

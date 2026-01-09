@@ -49,6 +49,8 @@ export const ContentModelSettings: React.FC<ContentModelSettingsProps> = ({
           <option value="qwen">通义千问 (Qwen)</option>
           <option value="doubao">豆包 (Doubao)</option>
           <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
           <option value="openrouter">OpenRouter</option>
         </select>
         <p className="text-xs text-gray-500 mt-1">
@@ -177,4 +179,3 @@ export const ContentModelSettings: React.FC<ContentModelSettingsProps> = ({
     </div>
   );
 };
-

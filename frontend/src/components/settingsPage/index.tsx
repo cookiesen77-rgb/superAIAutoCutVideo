@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react";
-import React, { useState } from "react";
-import { WebSocketMessage } from "../../services/clients";
+import React, { useEffect, useMemo, useState } from "react";
+import { WebSocketMessage, apiClient } from "../../services/clients";
+import AdminSection from "./components/AdminSection";
 import AboutSection from "./components/AboutSection";
 import { ContentModelSettings } from "./components/models/content/ContentModelSettings";
 import { VideoModelSettings } from "./components/models/video/VideoModelSettings";
@@ -15,17 +16,48 @@ import { useVideoModelConfig } from "./hooks/useVideoModelConfig";
  */
 interface SettingsPageProps {
   messages?: WebSocketMessage[];
-  backendStatus?: { running: boolean; port: number; pid?: number };
+  backendStatus?: { running: boolean; baseUrl: string };
   connections?: { api: boolean; websocket: boolean };
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
   messages = [],
-  backendStatus = { running: false, port: 8000 },
+  backendStatus = { running: false, baseUrl: "" },
   connections = { api: false, websocket: false },
 }) => {
   const [activeSection, setActiveSection] = useState(sections[0].id);
+  const [isAdmin, setIsAdmin] = useState(false);
 
+  useEffect(() => {
+    let mounted = true;
+    const loadMe = async () => {
+      try {
+        const me = await apiClient.me();
+        if (mounted) {
+          setIsAdmin(Boolean(me?.is_admin));
+        }
+      } catch {
+        if (mounted) {
+          setIsAdmin(false);
+        }
+      }
+    };
+    loadMe();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const visibleSections = useMemo(
+    () => (isAdmin ? sections : sections.filter((section) => section.id !== "admin")),
+    [isAdmin]
+  );
+
+  useEffect(() => {
+    if (!visibleSections.find((section) => section.id === activeSection)) {
+      setActiveSection(visibleSections[0]?.id || "");
+    }
+  }, [activeSection, visibleSections]);
 
   const {
     selectedProvider,
@@ -100,10 +132,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         );
       case "about":
         return <AboutSection />;
+      case "admin":
+        return <AdminSection />;
       default:
         return null;
     }
   };
+
+  const contentWidthClass = activeSection === "admin" ? "max-w-5xl" : "max-w-2xl";
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -122,7 +158,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           {/* 侧边栏 */}
           <div className="w-64 bg-gray-50 border-r">
             <nav className="p-4 space-y-1">
-              {sections.map((section) => {
+              {visibleSections.map((section) => {
                 const Icon = section.icon;
                 const isActive = activeSection === section.id;
 
@@ -153,9 +189,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
           {/* 主内容区 */}
           <div className="flex-1 p-6">
-            <div className="max-w-2xl">
+            <div className={contentWidthClass}>
               <h3 className="text-lg font-medium text-gray-900 mb-6">
-                {sections.find((s) => s.id === activeSection)?.label}
+                {visibleSections.find((s) => s.id === activeSection)?.label}
               </h3>
 
               {renderSectionContent()}
@@ -168,4 +204,3 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 };
 
 export default SettingsPage;
-

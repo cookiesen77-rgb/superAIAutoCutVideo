@@ -27,7 +27,7 @@ const AboutSection: React.FC = () => (
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-600">开发者:</dt>
-              <dd className="font-medium">xiaohu2206 Team</dd>
+              <dd className="font-medium">SuperAIAutoCutVideo Team</dd>
             </div>
           </dl>
         </div>
@@ -41,11 +41,11 @@ const AboutSection: React.FC = () => (
             </div>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2" />
-              <span>Tauri (Rust)</span>
+              <span>Electron</span>
             </div>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2" />
-              <span>Python FastAPI</span>
+              <span>Go Cloud API</span>
             </div>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-purple-500 rounded-full mr-2" />

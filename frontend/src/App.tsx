@@ -4,26 +4,24 @@ import Navigation from "./components/Navigation";
 import SettingsPage from "./components/settingsPage";
 import ProjectEditPage from "./pages/ProjectEditPage";
 import ProjectManagementPage from "./pages/ProjectManagementPage";
+import LoginPage from "./components/auth/LoginPage";
 import {
-  TauriCommands,
   WebSocketMessage,
   apiClient,
-  autoConfigureBackend,
-  configureBackend,
   wsClient,
 } from "./services/clients";
+import { authService } from "./services/authService";
 
 interface BackendStatus {
   running: boolean;
-  port: number;
-  pid?: number;
+  baseUrl: string;
 }
 
 const App: React.FC = () => {
   // 状态管理
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({
     running: false,
-    port: 8000,
+    baseUrl: apiClient.getBaseUrl(),
   });
   const [connectionStatus, setConnectionStatus] = useState({
     backend: false,
@@ -34,6 +32,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
 
   // 初始化应用
   useEffect(() => {
@@ -58,7 +57,11 @@ const App: React.FC = () => {
     wsClient.on("close", handleWsClose);
     wsClient.on("error", handleWsError);
 
-    initializeApp();
+    if (isAuthenticated) {
+      initializeApp();
+    } else {
+      setIsLoading(false);
+    }
 
     return () => {
       wsClient.off("*", handleWsMessage);
@@ -67,17 +70,18 @@ const App: React.FC = () => {
       wsClient.off("error", handleWsError);
       wsClient.disconnect();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const initializeApp = async () => {
     try {
       setIsLoading(true);
 
-      const status = await checkBackendStatus();
-      await testApiConnection();
+      const apiOk = await testApiConnection();
+      setBackendStatus({ running: apiOk, baseUrl: apiClient.getBaseUrl() });
+      setConnectionStatus((prev) => ({ ...prev, backend: apiOk }));
 
-      if (status && status.running) {
-        console.log("后端正在运行，尝试连接WebSocket...");
+      if (apiOk) {
+        console.log("API可用，尝试连接WebSocket...");
         const wsTimeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("WebSocket连接超时")), 2000)
         );
@@ -87,8 +91,6 @@ const App: React.FC = () => {
         } catch (error) {
           console.error("WebSocket连接失败:", error);
         }
-      } else {
-        console.log("后端未运行，跳过WebSocket连接");
       }
     } catch (error) {
       console.error("初始化应用失败:", error);
@@ -97,91 +99,14 @@ const App: React.FC = () => {
     }
   };
 
-  const checkBackendStatus = async (): Promise<BackendStatus | null> => {
-    try {
-      let status: BackendStatus;
-      // 检查是否在Tauri环境中
-      if (typeof (window as any).__TAURI_IPC__ === "function") {
-        status = await TauriCommands.getBackendStatus();
-        // 根据返回端口动态配置 API 与 WS 端点
-        if (status?.port) {
-          configureBackend(status.port);
-        }
-        // 若 Tauri 管理的后端未运行（例如你手动单独启动了后端），尝试自动发现外部后端端口
-        if (!status?.running) {
-          const discoveredOk = await autoConfigureBackend();
-          if (discoveredOk) {
-            // 读取服务端口信息，更新状态
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 1000);
-              const serverInfo = await fetch(
-                `${apiClient.getBaseUrl()}/api/server/info`,
-                {
-                  method: "GET",
-                  headers: { "Content-Type": "application/json" },
-                  signal: controller.signal,
-                }
-              ).then((res) => res.json());
-              clearTimeout(timeoutId);
-              const port = serverInfo?.data?.port ?? 8000;
-              status = { running: true, port };
-            } catch {
-              status = { running: true, port: 8000 };
-            }
-          }
-        }
-      } else {
-        // 在浏览器环境中，尝试自动发现后端端口
-        console.log("浏览器环境，尝试自动发现后端端口...");
-        const discovered = await autoConfigureBackend();
-        if (discovered) {
-          // 获取实际配置的端口信息（添加超时）
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1000);
-
-            const serverInfo = await fetch(
-              `${apiClient.getBaseUrl()}/api/server/info`,
-              {
-                method: "GET",
-                headers: { "Content-Type": "application/json" },
-                signal: controller.signal,
-              }
-            ).then((res) => res.json());
-
-            clearTimeout(timeoutId);
-
-            if (serverInfo.data && serverInfo.data.port) {
-              status = { running: true, port: serverInfo.data.port };
-            } else {
-              status = { running: true, port: 8000 };
-            }
-          } catch (error) {
-            console.warn("获取服务器信息失败，使用默认端口:", error);
-            status = { running: true, port: 8000 };
-          }
-        } else {
-          console.warn("无法发现后端服务，使用默认配置");
-          status = { running: false, port: 8000 };
-        }
-      }
-      setBackendStatus(status);
-      setConnectionStatus((prev) => ({ ...prev, backend: status.running }));
-      return status;
-    } catch (error) {
-      console.error("检查后端状态失败:", error);
-      setConnectionStatus((prev) => ({ ...prev, backend: false }));
-      return null;
-    }
-  };
-
-  const testApiConnection = async () => {
+  const testApiConnection = async (): Promise<boolean> => {
     try {
       const response = await apiClient.testConnection();
       setConnectionStatus((prev) => ({ ...prev, api: response }));
+      return response;
     } catch (error) {
       setConnectionStatus((prev) => ({ ...prev, api: false }));
+      return false;
     }
   };
 
@@ -194,6 +119,10 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage onAuthSuccess={() => setIsAuthenticated(true)} />;
   }
 
 

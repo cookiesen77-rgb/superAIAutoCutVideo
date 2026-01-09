@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import platform
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
 SERVICE_DATA_DIR = BASE_DIR / "serviceData" / "tts"
 PREVIEWS_DIR = SERVICE_DATA_DIR / "previews"
 VOICES_CACHE_PATH = SERVICE_DATA_DIR / "edge_voices_cache.json"
+_ENV_LOCK = asyncio.Lock()
+_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 async def _ensure_parent_dir(path: Path) -> None:
@@ -128,9 +131,11 @@ class EdgeTtsService:
         try:
             if VOICES_CACHE_PATH.exists():
                 try:
-                    data = json.loads(VOICES_CACHE_PATH.read_text("utf-8"))
-                    if isinstance(data, dict) and "voices" in data and isinstance(data["voices"], list):
-                        return data["voices"]
+                    age = time.time() - VOICES_CACHE_PATH.stat().st_mtime
+                    if age <= _CACHE_TTL_SECONDS:
+                        data = json.loads(VOICES_CACHE_PATH.read_text("utf-8"))
+                        if isinstance(data, dict) and "voices" in data and isinstance(data["voices"], list):
+                            return data["voices"]
                 except Exception:
                     pass
 
@@ -211,57 +216,58 @@ class EdgeTtsService:
                 candidates.append(_normalize_proxy_url(_resolve_proxy_url()))
 
             errs: List[Dict[str, Any]] = []
-            for proxy in candidates:
-                prev_env: Dict[str, Optional[str]] = {}
-                need_disable_env = proxy is None
-                try:
+            async with _ENV_LOCK:
+                for proxy in candidates:
+                    prev_env: Dict[str, Optional[str]] = {}
+                    need_disable_env = proxy is None
                     try:
-                        logger.info(f"edge_tts proxy attempt: {proxy}")
-                    except Exception:
-                        pass
-                    if need_disable_env:
-                        for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "EDGE_TTS_PROXY"):
-                            prev_env[k] = os.environ.get(k)
-                            os.environ.pop(k, None)
-                        prev_env["NO_PROXY"] = os.environ.get("NO_PROXY")
-                        os.environ["NO_PROXY"] = "*"
-                    await _ensure_parent_dir(out_path)
-                    try:
-                        communicate = edge_tts.Communicate(text=text, voice=vid, rate=rate, pitch=pitch, proxy=proxy)
-                        await communicate.save(str(out_path))
-                    except Exception:
-                        audio_data = bytes()
-                        cm2 = edge_tts.Communicate(text=text, voice=vid, rate=rate, pitch=pitch, proxy=proxy)
-                        async for chunk in cm2.stream():
-                            if chunk.get("type") == "audio":
-                                audio_data += chunk.get("data", b"")
-                        if not audio_data:
-                            raise
-                        with open(str(out_path), "wb") as f:
-                            f.write(audio_data)
-                    dur = await _ffprobe_duration(str(out_path))
-                    return {"success": True, "path": str(out_path), "duration": dur, "codec": "mp3", "sample_rate": None}
-                except Exception as e:
-                    msg = str(e)
-                    requires_proxy = False
-                    if ("403" in msg) and ("Invalid response status" in msg or "speech.platform.bing.com" in msg or "TrustedClientToken" in msg):
-                        requires_proxy = True
-                    if ("Cannot connect to host" in msg) or ("Connect call failed" in msg) or ("proxy" in msg.lower()):
-                        requires_proxy = True
-                    errs.append({"message": msg, "requires_proxy": requires_proxy})
-                finally:
-                    if need_disable_env:
-                        for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "EDGE_TTS_PROXY"):
-                            v = prev_env.get(k, None)
-                            if v is None:
+                        try:
+                            logger.info(f"edge_tts proxy attempt: {proxy}")
+                        except Exception:
+                            pass
+                        if need_disable_env:
+                            for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "EDGE_TTS_PROXY"):
+                                prev_env[k] = os.environ.get(k)
                                 os.environ.pop(k, None)
+                            prev_env["NO_PROXY"] = os.environ.get("NO_PROXY")
+                            os.environ["NO_PROXY"] = "*"
+                        await _ensure_parent_dir(out_path)
+                        try:
+                            communicate = edge_tts.Communicate(text=text, voice=vid, rate=rate, pitch=pitch, proxy=proxy)
+                            await communicate.save(str(out_path))
+                        except Exception:
+                            audio_data = bytes()
+                            cm2 = edge_tts.Communicate(text=text, voice=vid, rate=rate, pitch=pitch, proxy=proxy)
+                            async for chunk in cm2.stream():
+                                if chunk.get("type") == "audio":
+                                    audio_data += chunk.get("data", b"")
+                            if not audio_data:
+                                raise
+                            with open(str(out_path), "wb") as f:
+                                f.write(audio_data)
+                        dur = await _ffprobe_duration(str(out_path))
+                        return {"success": True, "path": str(out_path), "duration": dur, "codec": "mp3", "sample_rate": None}
+                    except Exception as e:
+                        msg = str(e)
+                        requires_proxy = False
+                        if ("403" in msg) and ("Invalid response status" in msg or "speech.platform.bing.com" in msg or "TrustedClientToken" in msg):
+                            requires_proxy = True
+                        if ("Cannot connect to host" in msg) or ("Connect call failed" in msg) or ("proxy" in msg.lower()):
+                            requires_proxy = True
+                        errs.append({"message": msg, "requires_proxy": requires_proxy})
+                    finally:
+                        if need_disable_env:
+                            for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "EDGE_TTS_PROXY"):
+                                v = prev_env.get(k, None)
+                                if v is None:
+                                    os.environ.pop(k, None)
+                                else:
+                                    os.environ[k] = v
+                            vnp = prev_env.get("NO_PROXY", None)
+                            if vnp is None:
+                                os.environ.pop("NO_PROXY", None)
                             else:
-                                os.environ[k] = v
-                        vnp = prev_env.get("NO_PROXY", None)
-                        if vnp is None:
-                            os.environ.pop("NO_PROXY", None)
-                        else:
-                            os.environ["NO_PROXY"] = vnp
+                                os.environ["NO_PROXY"] = vnp
 
             if errs:
                 last = errs[-1]

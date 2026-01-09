@@ -7,8 +7,7 @@ interface StatusPanelProps {
   messages: WebSocketMessage[]
   backendStatus: {
     running: boolean
-    port: number
-    pid?: number
+    baseUrl: string
   }
   connections: {
     api: boolean
@@ -151,7 +150,7 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
             <div>
               <p className="text-sm font-medium text-gray-900">后端服务</p>
               <p className={`text-xs ${backendStatus.running ? 'text-green-600' : 'text-red-600'}`}>
-                {backendStatus.running ? `运行中 :${backendStatus.port}` : '已停止'}
+                {backendStatus.running ? `运行中 ${backendStatus.baseUrl || ''}` : '不可用'}
               </p>
             </div>
           </div>
