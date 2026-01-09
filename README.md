@@ -88,16 +88,6 @@ cargo tauri dev
 - 前端说明：`docs/FRONTEND_README.md`
 - 使用指南：`USAGE.md`
 
-## 联系方式
-
-<img src="docs/image/douyin.png" alt="抖音码" width="160" />
-
-- 抖音号：`xiaohu_111`
-- 微信号：`interest_dog`
-
-## 说明
-
-如果大家有不懂的或者想优化添加的功能请联系我，比如需要我录制教程视频都可以。现在版本还不稳定，没有做版本管理，还在断断续续更新中，不懂代码的用起来可能还有难度。
 
 ## 许可证
 
